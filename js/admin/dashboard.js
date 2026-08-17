@@ -1,6 +1,9 @@
 import { auth, signOut, onAuthStateChanged } from "../firebase.js";
 import { initSuperAdminUI, showToast, closeModal } from "./superadmin-ui.js";
 
+// Super Admin UID access-control constant (Admin Panel ONLY)
+const SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
+
 // DOM Elements
 const pageLoader = document.getElementById("page-loader");
 const adminEmailDisplay = document.getElementById("admin-email-display");
@@ -10,14 +13,27 @@ const sidebarUserAvatar = document.getElementById("sidebar-user-avatar");
 const logoutBtn = document.getElementById("logout-btn");
 
 /**
- * 1. Authentication State Protection Guard
+ * 1. Authentication State Protection Guard with Super Admin UID verification
  */
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   if (!user) {
     // If not authenticated, redirect to Super Admin login page (admin/index.html)
     window.location.replace("./index.html");
+  } else if (user.uid !== SUPER_ADMIN_UID) {
+    // Access Denied: Authenticated user is NOT the authorized Super Admin
+    console.warn("Unauthorized access attempt to Super Admin Dashboard. UID:", user.uid);
+    
+    const loaderText = document.querySelector(".page-loader-text");
+    if (loaderText) {
+      loaderText.innerHTML = '<span style="color: #ef4444; font-weight: 700;">Access Denied:</span> You do not have Super Admin privileges.<br>Redirecting...';
+    }
+    
+    await signOut(auth);
+    setTimeout(() => {
+      window.location.replace("./index.html");
+    }, 1500);
   } else {
-    // Authenticated: Populate Super Admin user details
+    // Authorized Super Admin: Populate user details
     const email = user.email || "Super Admin";
     const initial = email.charAt(0).toUpperCase();
 
@@ -36,11 +52,13 @@ onAuthStateChanged(auth, (user) => {
   }
 });
 
-// Failsafe: Hide loader after timeout if auth takes unusually long
+// Failsafe: Hide loader after timeout if auth takes unusually long (only for verified super admin)
 setTimeout(() => {
   if (pageLoader && !pageLoader.classList.contains("hidden")) {
-    pageLoader.classList.add("hidden");
-    initSuperAdminUI();
+    if (auth.currentUser && auth.currentUser.uid === SUPER_ADMIN_UID) {
+      pageLoader.classList.add("hidden");
+      initSuperAdminUI();
+    }
   }
 }, 3000);
 

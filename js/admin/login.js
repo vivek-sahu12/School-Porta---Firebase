@@ -1,4 +1,7 @@
-import { auth, signInWithEmailAndPassword, onAuthStateChanged } from "../firebase.js";
+import { auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "../firebase.js";
+
+// Super Admin UID access-control constant (Admin Panel ONLY)
+const SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
 
 // DOM Elements
 const loginForm = document.getElementById("login-form");
@@ -73,10 +76,15 @@ function setLoading(isLoading) {
   }
 }
 
-// 1. Listen for existing authenticated session (redirect to admin/dashboard.html)
+// 1. Listen for existing authenticated session (redirect if Super Admin UID matches)
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    window.location.replace("./dashboard.html");
+    if (user.uid === SUPER_ADMIN_UID) {
+      window.location.replace("./dashboard.html");
+    } else {
+      // Not the authorized Super Admin UID
+      signOut(auth);
+    }
   }
 });
 
@@ -104,7 +112,7 @@ if (togglePasswordBtn && passwordInput) {
 if (emailInput) emailInput.addEventListener("input", clearError);
 if (passwordInput) passwordInput.addEventListener("input", clearError);
 
-// 4. Handle Form Submission
+// 4. Handle Form Submission with Super Admin UID verification
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -137,8 +145,18 @@ if (loginForm) {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      if (userCredential.user) {
-        window.location.replace("./dashboard.html");
+      const user = userCredential.user;
+
+      if (user) {
+        // Enforce Super Admin UID Check for Admin Panel Access
+        if (user.uid === SUPER_ADMIN_UID) {
+          window.location.replace("./dashboard.html");
+        } else {
+          // Deny access if authenticated UID does not match Super Admin
+          await signOut(auth);
+          showError("Access Denied: This account is not authorized to access the Super Admin Panel.");
+          setLoading(false);
+        }
       }
     } catch (error) {
       console.error("Super Admin Authentication Error:", error.code, error.message);
