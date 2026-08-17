@@ -27,6 +27,7 @@ const schoolsCol = collection(db, "schools");
 const usersCol = collection(db, "users");
 const sessionsCol = collection(db, "sessions");
 const studentsCol = collection(db, "students");
+const adminLogsCol = collection(db, "admin_logs");
 
 /**
  * ============================================================================
@@ -128,29 +129,49 @@ export function subscribeToSessions(onData, onError) {
 }
 
 /**
- * Subscribe to Students belonging to a specific School
+ * Subscribe to Real-Time Admin Activity / Audit Logs
  */
-export function subscribeToStudentsBySchool(schoolId, onData, onError) {
-  if (!schoolId) {
-    onData([]);
-    return () => {};
-  }
+export function subscribeToAdminLogs(onData, onError) {
   try {
-    const q = query(studentsCol, where("schoolId", "==", schoolId), orderBy("createdAt", "desc"), limit(100));
+    const q = query(adminLogsCol, orderBy("timestamp", "desc"), limit(50));
     return onSnapshot(q, (snapshot) => {
-      const students = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data()
-      }));
-      onData(students);
+      const logs = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          formattedTime: data.timestamp?.toDate 
+            ? data.timestamp.toDate().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) 
+            : "Just now"
+        };
+      });
+      onData(logs);
     }, (error) => {
-      console.warn("Students listener error:", error);
+      console.warn("Admin logs listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
   } catch (err) {
-    console.warn("Could not setup students listener:", err);
+    console.warn("Could not setup admin logs listener:", err);
     onData([]);
+  }
+}
+
+/**
+ * Log Meaningful Administrative Actions to Firestore
+ */
+export async function logAdminAction({ action, target, details = "", adminEmail = "Super Admin" }) {
+  try {
+    const logDocRef = doc(adminLogsCol);
+    await setDoc(logDocRef, {
+      action,
+      target,
+      details,
+      admin: adminEmail || auth.currentUser?.email || "Super Admin",
+      timestamp: serverTimestamp()
+    });
+  } catch (err) {
+    console.warn("Could not record admin log:", err);
   }
 }
 
@@ -200,6 +221,13 @@ export async function saveSchoolAccount({
   }
 
   await setDoc(schoolDocRef, schoolData, { merge: true });
+
+  await logAdminAction({
+    action: existingDoc.exists() ? "School Updated" : "School Configured",
+    target: `${cleanSchoolName} (${cleanSchoolId})`,
+    details: `Status: ${status}, UID: ${cleanFirebaseUid || 'None'}`
+  });
+
   return { id: cleanSchoolId, ...schoolData };
 }
 
@@ -212,6 +240,12 @@ export async function updateSchool(schoolId, updateData) {
   await updateDoc(schoolDocRef, {
     ...updateData,
     updatedAt: serverTimestamp()
+  });
+
+  await logAdminAction({
+    action: "School Information Edited",
+    target: `School ID: ${cleanSchoolId}`,
+    details: updateData.schoolName ? `Name: ${updateData.schoolName}` : "Info updated"
   });
 }
 
@@ -226,6 +260,13 @@ export async function toggleSchoolStatus(schoolId, currentStatus) {
     status: newStatus,
     updatedAt: serverTimestamp()
   });
+
+  await logAdminAction({
+    action: newStatus === "Active" ? "School Activated" : "School Deactivated",
+    target: `School ID: ${cleanSchoolId}`,
+    details: `Status: ${currentStatus} → ${newStatus}`
+  });
+
   return newStatus;
 }
 
@@ -236,11 +277,17 @@ export async function permanentlyDeleteSchool(schoolId) {
   const cleanSchoolId = schoolId.trim().toUpperCase();
   const schoolDocRef = doc(db, "schools", cleanSchoolId);
   await deleteDoc(schoolDocRef);
+
+  await logAdminAction({
+    action: "School Permanently Deleted",
+    target: `School ID: ${cleanSchoolId}`,
+    details: "School document removed from Firestore"
+  });
 }
 
 /**
  * ============================================================================
- * 3. LEVEL 3: SCHOOL USER ACCOUNT OPERATIONS (Per-User Permissions & Device Limits)
+ * 3. LEVEL 3: SCHOOL USER ACCOUNT OPERATIONS
  * ============================================================================
  */
 
@@ -292,7 +339,6 @@ export async function saveUserAccount({
 
   if (!existingDoc.exists()) {
     userData.createdAt = serverTimestamp();
-    // Increment school user count
     try {
       const schoolDocRef = doc(db, "schools", cleanSchoolId);
       await updateDoc(schoolDocRef, {
@@ -304,119 +350,21 @@ export async function saveUserAccount({
   }
 
   await setDoc(userDocRef, userData, { merge: true });
+
+  await logAdminAction({
+    action: existingDoc.exists() ? "User Settings Updated" : "User Configured",
+    target: `${cleanName} (${cleanUid})`,
+    details: `School: ${cleanSchoolId}, Device Limit: ${userData.deviceLimit}, Status: ${status}`
+  });
+
   return { id: cleanUid, ...userData };
 }
 
 /**
- * Update Individual User Permissions
- */
-export async function updateUserPermissions(firebaseUid, permissions) {
-  const cleanUid = firebaseUid.trim();
-  const userDocRef = doc(db, "users", cleanUid);
-  await updateDoc(userDocRef, {
-    permissions,
-    updatedAt: serverTimestamp()
-  });
-}
-
-/**
- * Update Individual User Device Limit
- */
-export async function updateUserDeviceLimit(firebaseUid, deviceLimit) {
-  const cleanUid = firebaseUid.trim();
-  const userDocRef = doc(db, "users", cleanUid);
-  const newLimit = Math.max(1, Math.min(15, Number(deviceLimit) || 1));
-  await updateDoc(userDocRef, {
-    deviceLimit: newLimit,
-    updatedAt: serverTimestamp()
-  });
-  return newLimit;
-}
-
-/**
- * Toggle User Status (Active <-> Inactive)
- */
-export async function toggleUserStatus(firebaseUid, currentStatus) {
-  const cleanUid = firebaseUid.trim();
-  const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
-  const userDocRef = doc(db, "users", cleanUid);
-  await updateDoc(userDocRef, {
-    status: newStatus,
-    updatedAt: serverTimestamp()
-  });
-  return newStatus;
-}
-
-/**
- * Delete User Configuration
- */
-export async function deleteUserAccount(firebaseUid, schoolId) {
-  const cleanUid = firebaseUid.trim();
-  const userDocRef = doc(db, "users", cleanUid);
-  await deleteDoc(userDocRef);
-
-  if (schoolId) {
-    try {
-      const schoolDocRef = doc(db, "schools", schoolId.trim().toUpperCase());
-      await updateDoc(schoolDocRef, {
-        usersCount: increment(-1)
-      });
-    } catch (e) {
-      console.warn("Could not decrement user count:", e);
-    }
-  }
-}
-
-/**
- * Trigger Password Reset Email
- */
-export async function sendUserPasswordReset(email) {
-  if (!email) throw new Error("No email provided");
-  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-}
-
-/**
  * ============================================================================
- * 4. ACTIVE SESSIONS & DEVICE LIMIT ENFORCEMENT
+ * 4. ACTIVE SESSIONS & FORCE LOGOUT
  * ============================================================================
  */
-
-/**
- * Get active sessions count for a specific user
- */
-export async function getActiveSessionsCountForUser(userUid) {
-  try {
-    const q = query(sessionsCol, where("userUid", "==", userUid), where("status", "==", "active"));
-    const snap = await getDocs(q);
-    return snap.size;
-  } catch (err) {
-    console.warn("Error fetching user active sessions count:", err);
-    return 0;
-  }
-}
-
-/**
- * Create a new Active Session Record on successful login
- */
-export async function createSessionRecord({ userUid, schoolId, deviceId, deviceName }) {
-  const sessionId = `SES_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-  const sessionDocRef = doc(db, "sessions", sessionId);
-
-  const sessionData = {
-    sessionId,
-    userUid,
-    schoolId,
-    deviceId: deviceId || `DEV_${Math.floor(1000 + Math.random() * 9000)}`,
-    deviceName: deviceName || (navigator.userAgent.includes("Mobile") ? "Mobile Device" : "Desktop Browser"),
-    loginTime: serverTimestamp(),
-    lastActive: serverTimestamp(),
-    logoutTime: null,
-    status: "active"
-  };
-
-  await setDoc(sessionDocRef, sessionData);
-  return sessionData;
-}
 
 /**
  * Force Logout / Terminate an Active Session
@@ -428,51 +376,13 @@ export async function terminateSession(sessionId) {
       status: "terminated",
       logoutTime: serverTimestamp()
     });
+
+    await logAdminAction({
+      action: "Session Force Logged Out",
+      target: `Session: ${sessionId}`,
+      details: "Session marked as terminated"
+    });
   } catch (err) {
     console.warn("Terminate session error:", err);
   }
-}
-
-/**
- * ============================================================================
- * 5. STUDENT DATA & EXCEL IMPORT OPERATIONS (Per School)
- * ============================================================================
- */
-
-/**
- * Batch import validated student records for a specific school
- */
-export async function importStudentsBatch(schoolId, studentsList) {
-  const cleanSchoolId = schoolId.trim().toUpperCase();
-  if (!cleanSchoolId || !Array.isArray(studentsList) || studentsList.length === 0) {
-    throw new Error("Invalid student data payload.");
-  }
-
-  let importedCount = 0;
-
-  for (const student of studentsList) {
-    const studentDocRef = doc(studentsCol);
-    await setDoc(studentDocRef, {
-      schoolId: cleanSchoolId,
-      studentName: student.studentName || student.name || "Student",
-      className: student.className || student.class || "",
-      rollNo: student.rollNo ? String(student.rollNo) : "",
-      fatherName: student.fatherName || "",
-      createdAt: serverTimestamp()
-    });
-    importedCount++;
-  }
-
-  // Update school's studentsCount
-  try {
-    const schoolDocRef = doc(db, "schools", cleanSchoolId);
-    await updateDoc(schoolDocRef, {
-      studentsCount: increment(importedCount),
-      updatedAt: serverTimestamp()
-    });
-  } catch (err) {
-    console.warn("Could not update school student count:", err);
-  }
-
-  return importedCount;
 }

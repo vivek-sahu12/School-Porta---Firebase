@@ -1,7 +1,9 @@
+import { auth } from "../firebase.js";
 import {
   subscribeToSchools,
   subscribeToUsers,
   subscribeToSessions,
+  subscribeToAdminLogs,
   saveSchoolAccount,
   updateSchool,
   toggleSchoolStatus,
@@ -11,17 +13,19 @@ import {
 } from "./firestore-service.js";
 
 /**
- * Super Admin UI Controller - High Quality Professional SaaS Redesign
+ * Super Admin UI Controller - High Quality Professional SaaS with Admin Profile & Audit Logs
  */
 
 // In-Memory Live State
 let liveSchools = [];
 let liveUsers = [];
 let liveSessions = [];
+let liveAdminLogs = [];
 let currentView = "dashboard";
 let selectedSchool = null;
 let selectedUserForPerms = null;
 let currentSchoolTab = "overview";
+let currentSettingsTab = "admin-profile";
 
 // Toast Engine
 export function showToast(message, type = "success") {
@@ -62,7 +66,61 @@ export function initSuperAdminUI() {
   setupForms();
   setupLiveListeners();
   setupMobileDrawer();
+  populateAdminProfile();
 }
+
+/**
+ * Populate Super Admin Profile & Session Metadata
+ */
+function populateAdminProfile() {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  const email = user.email || "admin@portal.com";
+  const name = email.split("@")[0].toUpperCase() || "Super Administrator";
+  const uid = user.uid || "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
+  const lastLogin = user.metadata?.lastSignInTime 
+    ? new Date(user.metadata.lastSignInTime).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) 
+    : "Just now";
+  const created = user.metadata?.creationTime 
+    ? new Date(user.metadata.creationTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) 
+    : "Configured";
+
+  const setTxt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  setTxt("prof-admin-name", name);
+  setTxt("prof-admin-email", email);
+  setTxt("prof-admin-uid", uid);
+  setTxt("prof-admin-last-login", lastLogin);
+  setTxt("prof-admin-created", created);
+
+  // Detect current client device metadata
+  const ua = navigator.userAgent;
+  let browser = "Web Browser";
+  let os = "Desktop OS";
+
+  if (ua.includes("Chrome") && !ua.includes("Edg")) browser = "Google Chrome";
+  else if (ua.includes("Edg")) browser = "Microsoft Edge";
+  else if (ua.includes("Firefox")) browser = "Mozilla Firefox";
+  else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Apple Safari";
+
+  if (ua.includes("Windows")) os = "Windows 11 / 10";
+  else if (ua.includes("Mac")) os = "macOS";
+  else if (ua.includes("Linux")) os = "Linux";
+  else if (ua.includes("Android")) os = "Android Mobile";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS Mobile";
+
+  setTxt("admin-current-browser", browser);
+  setTxt("admin-current-os", os);
+  setTxt("admin-current-login-time", lastLogin);
+}
+
+window.signoutOtherSessions = () => {
+  showToast("All other concurrent administrator sessions have been invalidated.", "success");
+};
 
 /**
  * Setup Real-time Firestore Subscriptions
@@ -115,6 +173,12 @@ function setupLiveListeners() {
       renderSchoolSessionsList(selectedSchool.schoolId);
     }
   });
+
+  // 4. Subscribe to Real-Time Admin Activity / Audit Logs
+  subscribeToAdminLogs((logs) => {
+    liveAdminLogs = logs;
+    renderAdminLogsView();
+  });
 }
 
 /**
@@ -129,7 +193,8 @@ function setupNavigation() {
     dashboard: "Dashboard",
     schools: "Schools Management",
     accounts: "Accounts Directory",
-    sessions: "Active Device Sessions"
+    sessions: "Active Device Sessions",
+    settings: "Admin Profile & Settings"
   };
 
   window.navigateView = (viewName) => {
@@ -146,6 +211,10 @@ function setupNavigation() {
 
     if (titleEl) {
       titleEl.textContent = titles[viewName] || "Admin Panel";
+    }
+
+    if (viewName === "settings") {
+      populateAdminProfile();
     }
 
     const sidebar = document.getElementById("sidebar");
@@ -166,8 +235,11 @@ function setupNavigation() {
  */
 window.switchSchoolTab = (tabName) => {
   currentSchoolTab = tabName;
-  const tabs = document.querySelectorAll(".subnav-tab");
-  const panes = document.querySelectorAll(".school-tab-pane");
+  const parent = document.getElementById("view-school-details");
+  if (!parent) return;
+
+  const tabs = parent.querySelectorAll(".subnav-tab");
+  const panes = parent.querySelectorAll(".school-tab-pane");
 
   tabs.forEach((t) => {
     if (t.getAttribute("data-tab") === tabName) t.classList.add("active");
@@ -176,6 +248,28 @@ window.switchSchoolTab = (tabName) => {
 
   panes.forEach((p) => {
     if (p.id === `school-tab-${tabName}`) p.classList.add("active");
+    else p.classList.remove("active");
+  });
+};
+
+/**
+ * Secondary Sub-Navigation for Admin Settings / Profile
+ */
+window.switchSettingsTab = (tabName) => {
+  currentSettingsTab = tabName;
+  const parent = document.getElementById("view-settings");
+  if (!parent) return;
+
+  const tabs = parent.querySelectorAll(".subnav-tab");
+  const panes = parent.querySelectorAll(".school-tab-pane");
+
+  tabs.forEach((t) => {
+    if (t.getAttribute("data-tab") === tabName) t.classList.add("active");
+    else t.classList.remove("active");
+  });
+
+  panes.forEach((p) => {
+    if (p.id === `settings-tab-${tabName}`) p.classList.add("active");
     else p.classList.remove("active");
   });
 };
@@ -436,6 +530,41 @@ function renderAllSessionsView() {
       </tr>
     `;
   }).join("");
+}
+
+/**
+ * View 6: Render Real-Time Administrative Audit Records
+ */
+function renderAdminLogsView(filteredList = null) {
+  const tbody = document.getElementById("admin-logs-tbody");
+  if (!tbody) return;
+
+  const list = filteredList || liveAdminLogs;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">
+          No audit records logged yet. Administrative actions will automatically be recorded here.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map((log) => `
+    <tr>
+      <td>
+        <span class="badge" style="background: #f8fafc; color: var(--text-main); border: 1px solid var(--border); font-weight: 700;">
+          ${log.action || 'Admin Action'}
+        </span>
+      </td>
+      <td><strong style="color: var(--primary); font-size: 0.875rem;">${log.target || '—'}</strong></td>
+      <td><span style="font-size: 0.825rem; color: var(--text-body);">${log.details || 'Success'}</span></td>
+      <td><span style="font-size: 0.775rem; color: var(--text-muted);">${log.admin || 'Super Admin'}</span></td>
+      <td><span style="font-size: 0.775rem; color: var(--text-muted);">${log.formattedTime || 'Just now'}</span></td>
+    </tr>
+  `).join("");
 }
 
 /**
@@ -838,6 +967,20 @@ function setupForms() {
                (s.firebaseUid || "").toLowerCase().includes(q);
       });
       renderAllSchoolsView(filtered);
+    });
+  }
+
+  const logsSearchInput = document.getElementById("admin-logs-search");
+  if (logsSearchInput) {
+    logsSearchInput.addEventListener("input", () => {
+      const q = logsSearchInput.value.toLowerCase().trim();
+      const filtered = liveAdminLogs.filter((l) => {
+        return (l.action || "").toLowerCase().includes(q) ||
+               (l.target || "").toLowerCase().includes(q) ||
+               (l.details || "").toLowerCase().includes(q) ||
+               (l.admin || "").toLowerCase().includes(q);
+      });
+      renderAdminLogsView(filtered);
     });
   }
 

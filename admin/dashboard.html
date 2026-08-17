@@ -69,10 +69,14 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
           <span>Active Sessions</span>
         </a>
+        <a class="nav-link" data-view="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <span>Admin Settings</span>
+        </a>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="admin-pill">
+        <div class="admin-pill" style="cursor: pointer;" onclick="window.navigateView('settings')" title="View Admin Profile">
           <div class="admin-avatar">SA</div>
           <div class="admin-info">
             <div class="admin-info-email" id="sidebar-user-email">admin@portal.com</div>
@@ -97,6 +101,10 @@
           <div class="top-bar-title" id="page-view-title">Dashboard</div>
         </div>
         <div class="top-bar-right">
+          <button class="btn btn-secondary btn-sm" onclick="window.navigateView('settings')">
+            <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            Admin Profile
+          </button>
           <button class="btn btn-primary btn-sm" onclick="window.openAddAccountModal()">
             <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Add Existing Account
@@ -463,6 +471,145 @@
                   <!-- Real-time Firestore sync -->
                 </tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 6: ADMIN SETTINGS & PROFILE (Profile, Sessions & Activity Log)
+             ================================================================ -->
+        <section id="view-settings" class="admin-view">
+          <div class="section-header-bar">
+            <div>
+              <h2 class="section-title">Super Admin Settings & Profile</h2>
+              <p class="section-subtitle">Manage administrative profile, active session security, and system audit records</p>
+            </div>
+          </div>
+
+          <!-- Secondary Sub-Navigation for Settings -->
+          <div class="subnav-tabs">
+            <button class="subnav-tab active" data-tab="admin-profile" onclick="window.switchSettingsTab('admin-profile')">1. Admin Profile</button>
+            <button class="subnav-tab" data-tab="admin-sessions" onclick="window.switchSettingsTab('admin-sessions')">2. Active Admin Sessions</button>
+            <button class="subnav-tab" data-tab="admin-logs" onclick="window.switchSettingsTab('admin-logs')">3. Activity / Audit Log</button>
+          </div>
+
+          <!-- Sub-Tab 1: Admin Profile -->
+          <div id="settings-tab-admin-profile" class="school-tab-pane active">
+            <div class="section-panel-card">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  Super Admin Credentials & Account Information
+                </div>
+              </div>
+              <div class="info-grid">
+                <div class="info-item">
+                  <div class="info-label">Administrator Name</div>
+                  <div class="info-value" id="prof-admin-name">Super Administrator</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Authenticated Email</div>
+                  <div class="info-value" id="prof-admin-email">—</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Firebase Auth UID (Master Guard)</div>
+                  <div class="info-value chip-uid" id="prof-admin-uid" style="font-size: 0.85rem;">FSe6FQsJrKaDVqqjcO4jv2EIkfp2</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Account Privilege & Status</div>
+                  <div class="info-value">
+                    <span class="badge badge-active">Master Super Admin • Active</span>
+                  </div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Last Sign In</div>
+                  <div class="info-value" id="prof-admin-last-login">—</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Account Created</div>
+                  <div class="info-value" id="prof-admin-created">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 2: Active Admin Sessions -->
+          <div id="settings-tab-admin-sessions" class="school-tab-pane">
+            <div class="section-panel-card">
+              <div class="panel-header">
+                <div class="panel-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
+                  Current Admin Device Session
+                </div>
+              </div>
+              <div class="card-table-wrapper">
+                <div class="table-responsive">
+                  <table class="clean-table">
+                    <thead>
+                      <tr>
+                        <th>Device & Browser</th>
+                        <th>Operating System</th>
+                        <th>Login Time</th>
+                        <th>Last Active</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <div style="font-weight: 700; color: var(--text-main);" id="admin-current-browser">Chrome Browser</div>
+                          <div style="font-size: 0.75rem; color: var(--text-muted);">Current Active Device</div>
+                        </td>
+                        <td><span style="font-weight: 600;" id="admin-current-os">Windows</span></td>
+                        <td><span style="font-size: 0.85rem;" id="admin-current-login-time">Today, Just now</span></td>
+                        <td><span style="font-size: 0.85rem; color: #16a34a; font-weight: 600;">Active Now</span></td>
+                        <td><span class="badge badge-active">Current Session</span></td>
+                        <td style="text-align: right;">
+                          <button class="btn btn-secondary btn-sm" onclick="window.signoutOtherSessions()">
+                            Sign out other sessions
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-Tab 3: Activity / Audit Log -->
+          <div id="settings-tab-admin-logs" class="school-tab-pane">
+            <div class="section-panel-card">
+              <div class="panel-header">
+                <div>
+                  <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    Administrative Audit Records
+                  </div>
+                  <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">Chronological timeline of institutional and configuration actions.</div>
+                </div>
+                <input type="text" id="admin-logs-search" class="form-input" placeholder="Search audit logs..." style="max-width: 240px; padding: 6px 12px;">
+              </div>
+              <div class="card-table-wrapper">
+                <div class="table-responsive">
+                  <table class="clean-table">
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Target Institution / Entity</th>
+                        <th>Details / Result</th>
+                        <th>Administrator</th>
+                        <th>Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="admin-logs-tbody">
+                      <!-- Dynamically filled with real Firestore audit logs -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </section>
