@@ -278,11 +278,11 @@ body {
   display: block;
 }
 
-/* Metrics Summary Grid (4 Cards) */
+/* Metrics Summary Grid (5 Clean Cards) */
 .metrics-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
   margin-bottom: 24px;
 }
 

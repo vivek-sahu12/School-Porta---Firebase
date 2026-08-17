@@ -19,12 +19,13 @@ import {
   sendPasswordResetEmail
 } from "../firebase.js";
 
-// Super Admin UID constant for access control
+// Super Admin UID constant for access control (Level 1)
 export const SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
 
 // Collection References
 const schoolsCol = collection(db, "schools");
 const usersCol = collection(db, "users");
+const sessionsCol = collection(db, "sessions");
 const studentsCol = collection(db, "students");
 
 /**
@@ -34,7 +35,7 @@ const studentsCol = collection(db, "students");
  */
 
 /**
- * Subscribe to all Schools
+ * Subscribe to all School Accounts (Level 2)
  */
 export function subscribeToSchools(onData, onError) {
   try {
@@ -45,6 +46,7 @@ export function subscribeToSchools(onData, onError) {
         return {
           id: d.id,
           schoolId: data.schoolId || d.id,
+          firebaseUid: data.firebaseUid || "",
           ...data,
           lastUpdated: data.updatedAt?.toDate 
             ? data.updatedAt.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) 
@@ -64,7 +66,7 @@ export function subscribeToSchools(onData, onError) {
 }
 
 /**
- * Subscribe to all Users
+ * Subscribe to all School User Accounts (Level 3)
  */
 export function subscribeToUsers(onData, onError) {
   try {
@@ -74,7 +76,9 @@ export function subscribeToUsers(onData, onError) {
         const data = d.data();
         return {
           id: d.id,
-          uid: data.uid || d.id,
+          firebaseUid: data.firebaseUid || d.id,
+          uid: data.firebaseUid || d.id,
+          schoolId: data.schoolId || "",
           ...data
         };
       });
@@ -86,6 +90,39 @@ export function subscribeToUsers(onData, onError) {
     });
   } catch (err) {
     console.warn("Could not setup users listener:", err);
+    onData([]);
+  }
+}
+
+/**
+ * Subscribe to Active Sessions
+ */
+export function subscribeToSessions(onData, onError) {
+  try {
+    const q = query(sessionsCol, where("status", "==", "active"), limit(100));
+    return onSnapshot(q, (snapshot) => {
+      const sessions = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          sessionId: data.sessionId || d.id,
+          ...data,
+          formattedLoginTime: data.loginTime?.toDate 
+            ? data.loginTime.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) 
+            : "Active",
+          formattedLastActive: data.lastActive?.toDate 
+            ? data.lastActive.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) 
+            : "Now"
+        };
+      });
+      onData(sessions);
+    }, (error) => {
+      console.warn("Sessions listener error:", error);
+      if (onError) onError(error);
+      else onData([]);
+    });
+  } catch (err) {
+    console.warn("Could not setup sessions listener:", err);
     onData([]);
   }
 }
@@ -119,7 +156,7 @@ export function subscribeToStudentsBySchool(schoolId, onData, onError) {
 
 /**
  * ============================================================================
- * 2. SCHOOL ACCOUNT OPERATIONS
+ * 2. LEVEL 2: SCHOOL ACCOUNT OPERATIONS
  * ============================================================================
  */
 
@@ -128,6 +165,7 @@ export function subscribeToStudentsBySchool(schoolId, onData, onError) {
  */
 export async function saveSchoolAccount({
   schoolId,
+  firebaseUid = "",
   schoolName,
   logoUrl = "",
   address = "",
@@ -136,6 +174,7 @@ export async function saveSchoolAccount({
 }) {
   const cleanSchoolId = schoolId.trim().toUpperCase();
   const cleanSchoolName = schoolName.trim();
+  const cleanFirebaseUid = firebaseUid.trim();
   const cleanLogoUrl = logoUrl ? logoUrl.trim() : "";
 
   const schoolDocRef = doc(db, "schools", cleanSchoolId);
@@ -143,6 +182,7 @@ export async function saveSchoolAccount({
 
   const schoolData = {
     schoolId: cleanSchoolId,
+    firebaseUid: cleanFirebaseUid,
     name: cleanSchoolName,
     schoolName: cleanSchoolName,
     logoUrl: cleanLogoUrl,
@@ -200,7 +240,7 @@ export async function permanentlyDeleteSchool(schoolId) {
 
 /**
  * ============================================================================
- * 3. USER ACCOUNT OPERATIONS (Configuring Existing Firebase Authentication accounts)
+ * 3. LEVEL 3: SCHOOL USER ACCOUNT OPERATIONS (Per-User Permissions & Device Limits)
  * ============================================================================
  */
 
@@ -208,7 +248,7 @@ export async function permanentlyDeleteSchool(schoolId) {
  * Configure an Existing Firebase Authentication User Account under a School
  */
 export async function saveUserAccount({
-  uid,
+  firebaseUid,
   schoolId,
   displayName = "",
   email = "",
@@ -216,10 +256,14 @@ export async function saveUserAccount({
   deviceLimit = 3,
   permissions = {}
 }) {
-  const cleanUid = uid.trim();
-  const cleanSchoolId = schoolId.trim().toUpperCase();
+  const cleanUid = (firebaseUid || "").trim();
+  const cleanSchoolId = (schoolId || "").trim().toUpperCase();
   const cleanEmail = email ? email.trim().toLowerCase() : "";
   const cleanName = displayName ? displayName.trim() : (cleanEmail.split("@")[0] || "User");
+
+  if (!cleanUid || !cleanSchoolId) {
+    throw new Error("Missing required Firebase UID or School ID.");
+  }
 
   const userDocRef = doc(db, "users", cleanUid);
   const existingDoc = await getDoc(userDocRef);
@@ -233,6 +277,7 @@ export async function saveUserAccount({
   };
 
   const userData = {
+    firebaseUid: cleanUid,
     uid: cleanUid,
     type: "user",
     schoolId: cleanSchoolId,
@@ -265,8 +310,8 @@ export async function saveUserAccount({
 /**
  * Update Individual User Permissions
  */
-export async function updateUserPermissions(uid, permissions) {
-  const cleanUid = uid.trim();
+export async function updateUserPermissions(firebaseUid, permissions) {
+  const cleanUid = firebaseUid.trim();
   const userDocRef = doc(db, "users", cleanUid);
   await updateDoc(userDocRef, {
     permissions,
@@ -277,8 +322,8 @@ export async function updateUserPermissions(uid, permissions) {
 /**
  * Update Individual User Device Limit
  */
-export async function updateUserDeviceLimit(uid, deviceLimit) {
-  const cleanUid = uid.trim();
+export async function updateUserDeviceLimit(firebaseUid, deviceLimit) {
+  const cleanUid = firebaseUid.trim();
   const userDocRef = doc(db, "users", cleanUid);
   const newLimit = Math.max(1, Math.min(15, Number(deviceLimit) || 1));
   await updateDoc(userDocRef, {
@@ -291,8 +336,8 @@ export async function updateUserDeviceLimit(uid, deviceLimit) {
 /**
  * Toggle User Status (Active <-> Inactive)
  */
-export async function toggleUserStatus(uid, currentStatus) {
-  const cleanUid = uid.trim();
+export async function toggleUserStatus(firebaseUid, currentStatus) {
+  const cleanUid = firebaseUid.trim();
   const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
   const userDocRef = doc(db, "users", cleanUid);
   await updateDoc(userDocRef, {
@@ -305,8 +350,8 @@ export async function toggleUserStatus(uid, currentStatus) {
 /**
  * Delete User Configuration
  */
-export async function deleteUserAccount(uid, schoolId) {
-  const cleanUid = uid.trim();
+export async function deleteUserAccount(firebaseUid, schoolId) {
+  const cleanUid = firebaseUid.trim();
   const userDocRef = doc(db, "users", cleanUid);
   await deleteDoc(userDocRef);
 
@@ -332,7 +377,65 @@ export async function sendUserPasswordReset(email) {
 
 /**
  * ============================================================================
- * 4. STUDENT DATA & EXCEL IMPORT OPERATIONS (Per School)
+ * 4. ACTIVE SESSIONS & DEVICE LIMIT ENFORCEMENT
+ * ============================================================================
+ */
+
+/**
+ * Get active sessions count for a specific user
+ */
+export async function getActiveSessionsCountForUser(userUid) {
+  try {
+    const q = query(sessionsCol, where("userUid", "==", userUid), where("status", "==", "active"));
+    const snap = await getDocs(q);
+    return snap.size;
+  } catch (err) {
+    console.warn("Error fetching user active sessions count:", err);
+    return 0;
+  }
+}
+
+/**
+ * Create a new Active Session Record on successful login
+ */
+export async function createSessionRecord({ userUid, schoolId, deviceId, deviceName }) {
+  const sessionId = `SES_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+  const sessionDocRef = doc(db, "sessions", sessionId);
+
+  const sessionData = {
+    sessionId,
+    userUid,
+    schoolId,
+    deviceId: deviceId || `DEV_${Math.floor(1000 + Math.random() * 9000)}`,
+    deviceName: deviceName || (navigator.userAgent.includes("Mobile") ? "Mobile Device" : "Desktop Browser"),
+    loginTime: serverTimestamp(),
+    lastActive: serverTimestamp(),
+    logoutTime: null,
+    status: "active"
+  };
+
+  await setDoc(sessionDocRef, sessionData);
+  return sessionData;
+}
+
+/**
+ * Force Logout / Terminate an Active Session
+ */
+export async function terminateSession(sessionId) {
+  try {
+    const sessionDocRef = doc(db, "sessions", sessionId);
+    await updateDoc(sessionDocRef, {
+      status: "terminated",
+      logoutTime: serverTimestamp()
+    });
+  } catch (err) {
+    console.warn("Terminate session error:", err);
+  }
+}
+
+/**
+ * ============================================================================
+ * 5. STUDENT DATA & EXCEL IMPORT OPERATIONS (Per School)
  * ============================================================================
  */
 

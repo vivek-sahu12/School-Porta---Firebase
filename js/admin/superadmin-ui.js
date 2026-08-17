@@ -1,6 +1,7 @@
 import {
   subscribeToSchools,
   subscribeToUsers,
+  subscribeToSessions,
   subscribeToStudentsBySchool,
   saveSchoolAccount,
   updateSchool,
@@ -11,18 +12,20 @@ import {
   updateUserDeviceLimit,
   toggleUserStatus,
   deleteUserAccount,
+  terminateSession,
   sendUserPasswordReset,
   importStudentsBatch
 } from "./firestore-service.js";
 
 /**
  * Minimal Super Admin UI Controller
- * Direct Cloud Firestore Integration with Zero Demo Data.
+ * 3-Level Account Architecture & Live Device Session Tracking
  */
 
 // Live in-memory Firestore cache
 let liveSchools = [];
 let liveUsers = [];
+let liveSessions = [];
 let currentView = "dashboard";
 let selectedSchool = null;
 let selectedUserForPerms = null;
@@ -76,7 +79,7 @@ export function initSuperAdminUI() {
  * Setup Real-time Firestore Subscriptions
  */
 function setupLiveListeners() {
-  // 1. Subscribe to Schools
+  // 1. Subscribe to Schools (Level 2)
   subscribeToSchools((schools) => {
     liveSchools = schools;
     updateMetrics();
@@ -94,7 +97,7 @@ function setupLiveListeners() {
     }
   });
 
-  // 2. Subscribe to Users
+  // 2. Subscribe to Users (Level 3)
   subscribeToUsers((users) => {
     liveUsers = users;
     updateMetrics();
@@ -104,6 +107,19 @@ function setupLiveListeners() {
 
     if (selectedSchool) {
       renderSchoolUsersList(selectedSchool.schoolId);
+    }
+  });
+
+  // 3. Subscribe to Active Device Sessions
+  subscribeToSessions((sessions) => {
+    liveSessions = sessions;
+    updateMetrics();
+    renderDashboardSchools();
+    renderAllSchoolsView();
+
+    if (selectedSchool) {
+      renderSchoolUsersList(selectedSchool.schoolId);
+      renderSchoolSessionsList(selectedSchool.schoolId);
     }
   });
 }
@@ -153,13 +169,14 @@ function setupNavigation() {
 }
 
 /**
- * Update Top Metric Summary Cards
+ * Update Top Metric Summary Cards (5 Metrics)
  */
 function updateMetrics() {
   const totalSchools = liveSchools.length;
   const activeSchools = liveSchools.filter((s) => s.status === "Active").length;
   const inactiveSchools = liveSchools.filter((s) => s.status === "Inactive").length;
   const totalUsers = liveUsers.length;
+  const activeSessions = liveSessions.length;
 
   const setVal = (id, val) => {
     const el = document.getElementById(id);
@@ -170,6 +187,7 @@ function updateMetrics() {
   setVal("metric-active-schools", activeSchools);
   setVal("metric-inactive-schools", inactiveSchools);
   setVal("metric-total-users", totalUsers);
+  setVal("metric-active-sessions", activeSessions);
 }
 
 /**
@@ -184,11 +202,11 @@ function renderDashboardSchools(filteredList = null) {
   if (list.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6">
+        <td colspan="8">
           <div class="empty-box">
             <svg class="empty-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
             <h3>No schools configured yet</h3>
-            <p>Register your first school account using its unique School ID.</p>
+            <p>Register your first school account using its unique School ID and Firebase UID.</p>
             <button class="btn btn-primary btn-sm" onclick="window.openAddAccountModal('school')">+ Add School Account</button>
           </div>
         </td>
@@ -199,6 +217,7 @@ function renderDashboardSchools(filteredList = null) {
 
   tbody.innerHTML = list.map((s) => {
     const usersCount = liveUsers.filter((u) => u.schoolId === s.schoolId).length;
+    const schoolSessionsCount = liveSessions.filter((ses) => ses.schoolId === s.schoolId).length;
     const initial = s.logoInitial || s.schoolName?.substring(0, 2).toUpperCase() || "SC";
     const avatarHtml = s.logoUrl
       ? `<div class="school-avatar"><img src="${s.logoUrl}" alt="${s.schoolName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><span style="display:none;">${initial}</span></div>`
@@ -216,8 +235,14 @@ function renderDashboardSchools(filteredList = null) {
           </div>
         </td>
         <td><strong style="color: #1e40af; font-size: 0.85rem;">${s.schoolId}</strong></td>
+        <td><span style="font-family: monospace; font-size: 0.75rem; color: #475569;">${s.firebaseUid || '—'}</span></td>
         <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
         <td><strong>${usersCount}</strong> Users</td>
+        <td>
+          <span class="badge ${schoolSessionsCount > 0 ? 'badge-active' : 'badge-inactive'}">
+            ${schoolSessionsCount} Active
+          </span>
+        </td>
         <td><span style="font-size: 0.8rem; color: var(--color-text-muted);">${s.lastUpdated || 'Recently'}</span></td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">
@@ -238,13 +263,14 @@ function renderAllSchoolsView() {
 
   if (liveSchools.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="6"><div class="empty-box"><h3>No schools added yet</h3></div></td></tr>
+      <tr><td colspan="8"><div class="empty-box"><h3>No schools added yet</h3></div></td></tr>
     `;
     return;
   }
 
   tbody.innerHTML = liveSchools.map((s) => {
     const usersCount = liveUsers.filter((u) => u.schoolId === s.schoolId).length;
+    const schoolSessionsCount = liveSessions.filter((ses) => ses.schoolId === s.schoolId).length;
     const initial = s.logoInitial || s.schoolName?.substring(0, 2).toUpperCase() || "SC";
     const avatarHtml = s.logoUrl
       ? `<div class="school-avatar"><img src="${s.logoUrl}" alt="${s.schoolName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><span style="display:none;">${initial}</span></div>`
@@ -259,8 +285,10 @@ function renderAllSchoolsView() {
           </div>
         </td>
         <td><strong style="color: #1e40af;">${s.schoolId}</strong></td>
+        <td><span style="font-family: monospace; font-size: 0.75rem;">${s.firebaseUid || '—'}</span></td>
         <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
         <td>${usersCount} Users</td>
+        <td>${schoolSessionsCount} Active</td>
         <td>${s.studentsCount || 0} Students</td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">Open School</button>
@@ -280,25 +308,26 @@ function renderAccountsView() {
   const totalAccounts = liveSchools.length + liveUsers.length;
   if (totalAccounts === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="6"><div class="empty-box"><h3>No configured accounts</h3><p>Register existing Firebase Authentication accounts as Schools or Users.</p></div></td></tr>
+      <tr><td colspan="7"><div class="empty-box"><h3>No configured accounts</h3><p>Register existing Firebase Authentication accounts as Schools or Users.</p></div></td></tr>
     `;
     return;
   }
 
   let html = "";
 
-  // 1. School Accounts
+  // 1. Level 2: School Accounts
   liveSchools.forEach((s) => {
     html += `
       <tr>
         <td>
           <div style="font-weight: 600; color: var(--color-text-main);">${s.schoolName}</div>
-          <div style="font-size: 0.75rem; color: var(--color-text-muted);">School ID: ${s.schoolId}</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted);">Admin: ${s.adminEmail || 'None'}</div>
         </td>
-        <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">School</span></td>
-        <td><strong>${s.schoolId}</strong></td>
+        <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">School Account</span></td>
+        <td><span style="font-family: monospace; font-size: 0.75rem;">${s.firebaseUid || '—'}</span></td>
+        <td><strong style="color: #1e40af;">${s.schoolId}</strong></td>
         <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
-        <td>${s.adminEmail || 'No email'}</td>
+        <td>${s.address || 'Campus Address'}</td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">Configure</button>
         </td>
@@ -306,23 +335,25 @@ function renderAccountsView() {
     `;
   });
 
-  // 2. User Accounts
+  // 2. Level 3: School User Accounts
   liveUsers.forEach((u) => {
     const parentSchool = liveSchools.find((s) => s.schoolId === u.schoolId);
     const schoolLabel = parentSchool ? `${parentSchool.schoolName} (${u.schoolId})` : u.schoolId;
+    const userSessions = liveSessions.filter((ses) => ses.userUid === u.firebaseUid).length;
 
     html += `
       <tr>
         <td>
           <div style="font-weight: 600; color: var(--color-text-main);">${u.displayName || u.name}</div>
-          <div style="font-size: 0.725rem; color: var(--color-text-muted); font-family: monospace;">UID: ${u.uid}</div>
+          <div style="font-size: 0.725rem; color: var(--color-text-muted);">${u.email || 'No email'}</div>
         </td>
-        <td><span class="badge" style="background:#f3e8ff; color:#7e22ce;">User</span></td>
+        <td><span class="badge" style="background:#f3e8ff; color:#7e22ce;">User Account</span></td>
+        <td><span style="font-family: monospace; font-size: 0.75rem;">${u.firebaseUid}</span></td>
         <td><span style="font-size: 0.85rem; font-weight: 500;">${schoolLabel}</span></td>
         <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status}</span></td>
-        <td>Limit: ${u.deviceLimit || 3} Dev &bull; ${u.email || 'No email'}</td>
+        <td>Devices: <strong>${userSessions}/${u.deviceLimit || 3}</strong> Active</td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.uid}')">Permissions</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.firebaseUid}')">Permissions</button>
         </td>
       </tr>
     `;
@@ -370,6 +401,7 @@ function refreshSchoolDetailsView() {
 
   setText("sd-name", s.schoolName || s.name);
   setText("sd-id", s.schoolId);
+  setText("sd-firebase-uid", s.firebaseUid || "Not assigned");
   setText("sd-admin-email", s.adminEmail || "No admin contact");
   setText("sd-address", s.address || "Campus Address");
   setText("sd-logourl-display", s.logoUrl || "None configured");
@@ -411,6 +443,7 @@ function refreshSchoolDetailsView() {
   }
 
   renderSchoolUsersList(s.schoolId);
+  renderSchoolSessionsList(s.schoolId);
 }
 
 function renderSchoolUsersList(schoolId) {
@@ -435,30 +468,85 @@ function renderSchoolUsersList(schoolId) {
 
   tbody.innerHTML = users.map((u) => {
     const p = u.permissions || {};
+    const activeDevCount = liveSessions.filter((ses) => ses.userUid === u.firebaseUid).length;
+
     return `
       <tr>
         <td>
           <div style="font-weight: 600; color: var(--color-text-main);">${u.displayName || u.name}</div>
-          <div style="font-size: 0.725rem; color: var(--color-text-muted); font-family: monospace;">${u.uid}</div>
+          <div style="font-size: 0.725rem; color: var(--color-text-muted); font-family: monospace;">UID: ${u.firebaseUid}</div>
         </td>
         <td><span style="font-size: 0.85rem;">${u.email || '—'}</span></td>
         <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status}</span></td>
-        <td><strong>${u.deviceLimit || 3}</strong> Devices</td>
+        <td>
+          <span style="font-size: 0.85rem; font-weight: 600; color: ${activeDevCount >= (u.deviceLimit || 3) ? '#b91c1c' : '#1e40af'};">
+            ${activeDevCount} / ${u.deviceLimit || 3} Devices
+          </span>
+        </td>
         <td>
           <div style="display: flex; gap: 4px; flex-wrap: wrap;">
             ${p.editable ? '<span class="badge badge-active" style="font-size:0.675rem;">Editable</span>' : ''}
             ${p.addStudent ? '<span class="badge badge-active" style="font-size:0.675rem;">+Student</span>' : ''}
+            ${p.deleteStudent ? '<span class="badge" style="background:#fee2e2; color:#991b1b; font-size:0.675rem;">Delete</span>' : ''}
             ${p.excelExport ? '<span class="badge badge-active" style="font-size:0.675rem;">Excel</span>' : ''}
             ${p.reports ? '<span class="badge badge-active" style="font-size:0.675rem;">Reports</span>' : ''}
           </div>
         </td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.uid}')">Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.firebaseUid}')">Edit</button>
         </td>
       </tr>
     `;
   }).join("");
 }
+
+function renderSchoolSessionsList(schoolId) {
+  const tbody = document.getElementById("sd-sessions-tbody");
+  const countEl = document.getElementById("sd-sessions-count");
+  if (!tbody) return;
+
+  const sessions = liveSessions.filter((ses) => ses.schoolId === schoolId);
+  if (countEl) countEl.textContent = sessions.length;
+
+  if (sessions.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--color-text-muted); padding: 20px;">
+          No active device sessions for this school currently connected.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = sessions.map((ses) => `
+    <tr>
+      <td>
+        <span style="font-family: monospace; font-size: 0.775rem; font-weight: 600;">${ses.userUid}</span>
+      </td>
+      <td><span style="font-size: 0.85rem;">${ses.deviceName || 'Web Browser'}</span></td>
+      <td><span style="font-family: monospace; font-size: 0.725rem; color: var(--color-text-muted);">${ses.deviceId || 'DEV'}</span></td>
+      <td><span style="font-size: 0.8rem; color: #475569;">${ses.formattedLoginTime || 'Active'}</span></td>
+      <td><span style="font-size: 0.8rem; color: #475569;">${ses.formattedLastActive || 'Now'}</span></td>
+      <td><span class="badge badge-active">Active</span></td>
+      <td style="text-align: right;">
+        <button class="btn btn-danger-outline btn-sm" onclick="window.forceLogoutSession('${ses.sessionId}')">
+          Force Logout
+        </button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+window.forceLogoutSession = async (sessionId) => {
+  try {
+    await terminateSession(sessionId);
+    showToast("Session terminated successfully.", "success");
+  } catch (err) {
+    console.error("Force logout error:", err);
+    showToast("Failed to terminate session.", "error");
+  }
+};
 
 function renderSchoolStudentsList(students) {
   const container = document.getElementById("sd-students-container");
@@ -575,11 +663,12 @@ function setupForms() {
     });
   }
 
-  // 1. Submit School Account
+  // 1. Submit Level 2: School Account
   const formSchool = document.getElementById("form-account-school");
   if (formSchool) {
     formSchool.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const firebaseUid = document.getElementById("acc-school-uid").value.trim();
       const schoolId = document.getElementById("acc-school-id").value.trim().toUpperCase();
       const schoolName = document.getElementById("acc-school-name").value.trim();
       const logoUrl = document.getElementById("acc-school-logo").value.trim();
@@ -593,10 +682,10 @@ function setupForms() {
       }
 
       try {
-        await saveSchoolAccount({ schoolId, schoolName, logoUrl, adminEmail, address, status });
+        await saveSchoolAccount({ schoolId, firebaseUid, schoolName, logoUrl, adminEmail, address, status });
         formSchool.reset();
         closeModal("modal-add-account");
-        showToast(`School ${schoolName} (${schoolId}) saved successfully!`, "success");
+        showToast(`School Account ${schoolName} (${schoolId}) saved successfully!`, "success");
       } catch (err) {
         console.error("Save School error:", err);
         showToast("Failed to save school account.", "error");
@@ -604,13 +693,13 @@ function setupForms() {
     });
   }
 
-  // 2. Submit User Account
+  // 2. Submit Level 3: School User Account
   const formUser = document.getElementById("form-account-user");
   if (formUser) {
     formUser.addEventListener("submit", async (e) => {
       e.preventDefault();
       const schoolId = document.getElementById("acc-user-school").value;
-      const uid = document.getElementById("acc-user-uid").value.trim();
+      const firebaseUid = document.getElementById("acc-user-uid").value.trim();
       const displayName = document.getElementById("acc-user-name").value.trim();
       const email = document.getElementById("acc-user-email").value.trim();
       const status = document.getElementById("acc-user-status").value;
@@ -624,13 +713,13 @@ function setupForms() {
         reports: document.getElementById("acc-perm-reports")?.checked || false
       };
 
-      if (!schoolId || !uid) {
+      if (!schoolId || !firebaseUid) {
         showToast("Please select a school and enter Firebase UID.", "error");
         return;
       }
 
       try {
-        await saveUserAccount({ uid, schoolId, displayName, email, status, deviceLimit, permissions });
+        await saveUserAccount({ firebaseUid, schoolId, displayName, email, status, deviceLimit, permissions });
         formUser.reset();
         closeModal("modal-add-account");
         showToast(`User account configured under School ID ${schoolId}!`, "success");
@@ -647,7 +736,9 @@ function setupForms() {
     searchInput.addEventListener("input", () => {
       const q = searchInput.value.toLowerCase().trim();
       const filtered = liveSchools.filter((s) => {
-        return (s.schoolName || s.name || "").toLowerCase().includes(q) || (s.schoolId || "").toLowerCase().includes(q);
+        return (s.schoolName || s.name || "").toLowerCase().includes(q) || 
+               (s.schoolId || "").toLowerCase().includes(q) ||
+               (s.firebaseUid || "").toLowerCase().includes(q);
       });
       renderDashboardSchools(filtered);
     });
@@ -674,8 +765,8 @@ function setupForms() {
 /**
  * Edit User Permissions & Device Limit Modal
  */
-window.openEditUserPermsModal = (uid) => {
-  const user = liveUsers.find((u) => u.uid === uid);
+window.openEditUserPermsModal = (firebaseUid) => {
+  const user = liveUsers.find((u) => u.firebaseUid === firebaseUid || u.uid === firebaseUid);
   if (!user) return;
 
   selectedUserForPerms = user;
@@ -683,7 +774,7 @@ window.openEditUserPermsModal = (uid) => {
   const subEl = document.getElementById("m-perm-user-sub");
 
   if (titleEl) titleEl.textContent = user.displayName || user.name || "User";
-  if (subEl) subEl.textContent = `School: ${user.schoolId} • UID: ${user.uid}`;
+  if (subEl) subEl.textContent = `School: ${user.schoolId} • UID: ${user.firebaseUid}`;
 
   const statusSel = document.getElementById("m-perm-status");
   if (statusSel) statusSel.value = user.status || "Active";
@@ -732,7 +823,7 @@ if (savePermsBtn) {
 
     try {
       await saveUserAccount({
-        uid: selectedUserForPerms.uid,
+        firebaseUid: selectedUserForPerms.firebaseUid,
         schoolId: selectedUserForPerms.schoolId,
         displayName: selectedUserForPerms.displayName || selectedUserForPerms.name,
         email: selectedUserForPerms.email,
@@ -742,7 +833,7 @@ if (savePermsBtn) {
       });
 
       closeModal("modal-edit-user-perms");
-      showToast(`User settings saved for ${selectedUserForPerms.displayName || selectedUserForPerms.uid}!`, "success");
+      showToast(`User settings saved for ${selectedUserForPerms.displayName || selectedUserForPerms.firebaseUid}!`, "success");
     } catch (e) {
       console.error("Save perms error:", e);
       showToast("Failed to update user permissions.", "error");
@@ -783,7 +874,6 @@ function setupExcelUploader() {
 
         // Normalize student rows
         parsedExcelStudents = json.map((row) => {
-          // Flexible key lookup
           const name = row["Student Name"] || row["StudentName"] || row["Name"] || row["student_name"] || row["studentName"] || "";
           const cls = row["Class"] || row["Grade"] || row["class"] || row["className"] || "";
           const roll = row["Roll No"] || row["RollNo"] || row["Roll"] || row["rollNo"] || "";

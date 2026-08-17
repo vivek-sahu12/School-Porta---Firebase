@@ -26,9 +26,9 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="../assets/adminDashboard-QS6Uf9CH.js"></script>
-  <link rel="modulepreload" crossorigin href="../assets/firebase-Zb8zrjr6.js">
-  <link rel="stylesheet" crossorigin href="../assets/adminDashboard-B-EwUpb0.css">
+  <script type="module" crossorigin src="../assets/adminDashboard-VcI_GzV0.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/firebase-BFwJh6Ok.js">
+  <link rel="stylesheet" crossorigin href="../assets/adminDashboard-DOipM2ZQ.css">
 </head>
 <body>
   <!-- Auth Protection Loader -->
@@ -115,7 +115,7 @@
              VIEW 1: DASHBOARD (Overview + Schools List)
              ================================================================ -->
         <section id="view-dashboard" class="admin-view active">
-          <!-- 4 Clean Summary Cards -->
+          <!-- 5 Clean Summary Cards -->
           <div class="metrics-strip">
             <div class="metric-box">
               <div class="metric-box-title">Total Schools</div>
@@ -137,6 +137,11 @@
               <div class="metric-box-number" id="metric-total-users" style="color: #1e40af;">0</div>
               <div class="metric-box-sub">Assigned accounts</div>
             </div>
+            <div class="metric-box">
+              <div class="metric-box-title">Active Sessions</div>
+              <div class="metric-box-number" id="metric-active-sessions" style="color: #0369a1;">0</div>
+              <div class="metric-box-sub">Live active devices</div>
+            </div>
           </div>
 
           <!-- Primary Focus: Schools Section -->
@@ -146,7 +151,7 @@
               <p class="section-subtitle">Manage registered institutions, users, and student records</p>
             </div>
             <div style="display: flex; gap: 10px;">
-              <input type="text" id="dashboard-search-schools" class="form-input" placeholder="Search school name or ID..." style="max-width: 260px; padding: 6px 12px;">
+              <input type="text" id="dashboard-search-schools" class="form-input" placeholder="Search school name, ID or UID..." style="max-width: 260px; padding: 6px 12px;">
             </div>
           </div>
 
@@ -157,8 +162,10 @@
                   <tr>
                     <th>School</th>
                     <th>School ID</th>
+                    <th>School Firebase UID</th>
                     <th>Status</th>
                     <th>Users</th>
+                    <th>Active Sessions</th>
                     <th>Last Updated</th>
                     <th style="text-align: right;">Action</th>
                   </tr>
@@ -191,8 +198,10 @@
                   <tr>
                     <th>School Name</th>
                     <th>School ID</th>
+                    <th>School Firebase UID</th>
                     <th>Status</th>
                     <th>Users</th>
+                    <th>Active Devices</th>
                     <th>Students</th>
                     <th style="text-align: right;">Action</th>
                   </tr>
@@ -226,6 +235,8 @@
                   <div class="school-header-meta">
                     <span id="sd-id" style="font-weight: 700; color: #1e40af;">SCHOOL001</span>
                     <span>&bull;</span>
+                    <span style="font-family: monospace; font-size: 0.775rem;">UID: <span id="sd-firebase-uid">SCH_UID</span></span>
+                    <span>&bull;</span>
                     <span id="sd-status-badge" class="badge badge-active">Active</span>
                     <span>&bull;</span>
                     <span id="sd-admin-email" style="font-size: 0.8rem; color: #64748b;">admin@school.com</span>
@@ -240,7 +251,7 @@
 
             <!-- Single-Screen Consolidated Panels -->
             <div class="school-sections-grid">
-              <!-- Section A: School Information -->
+              <!-- Section 1: School Information -->
               <div class="section-panel-card">
                 <div class="panel-header">
                   <div class="panel-title">
@@ -260,7 +271,7 @@
                 </div>
               </div>
 
-              <!-- Section B: Users under this school -->
+              <!-- Section 2: Users under this school -->
               <div class="section-panel-card">
                 <div class="panel-header">
                   <div class="panel-title">
@@ -276,7 +287,7 @@
                         <th>User Name & UID</th>
                         <th>Email</th>
                         <th>Status</th>
-                        <th>Device Limit</th>
+                        <th>Active Devices / Limit</th>
                         <th>Permissions</th>
                         <th style="text-align: right;">Action</th>
                       </tr>
@@ -288,7 +299,35 @@
                 </div>
               </div>
 
-              <!-- Section C: Student Data & Excel Import -->
+              <!-- Section 3: Active Sessions / Devices for this School -->
+              <div class="section-panel-card">
+                <div class="panel-header">
+                  <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
+                    Live Connected Sessions (<span id="sd-sessions-count">0</span> Active)
+                  </div>
+                </div>
+                <div class="table-responsive">
+                  <table class="clean-table">
+                    <thead>
+                      <tr>
+                        <th>User UID</th>
+                        <th>Device Name</th>
+                        <th>Device ID</th>
+                        <th>Login Time</th>
+                        <th>Last Active</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sd-sessions-tbody">
+                      <!-- Dynamically filled -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Section 4: Student Data & Excel Import -->
               <div class="section-panel-card">
                 <div class="panel-header">
                   <div class="panel-title">
@@ -328,9 +367,10 @@
               <table class="clean-table">
                 <thead>
                   <tr>
-                    <th>Account / UID</th>
-                    <th>Type</th>
-                    <th>Assigned School</th>
+                    <th>Account Name / Display</th>
+                    <th>Account Type</th>
+                    <th>Firebase UID</th>
+                    <th>Assigned School ID</th>
                     <th>Status</th>
                     <th>Details</th>
                     <th style="text-align: right;">Action</th>
@@ -413,11 +453,15 @@
         <!-- Account Type Segmented Selector -->
         <div class="type-selector">
           <button type="button" class="type-btn active" id="type-select-school" onclick="window.setAccountFormType('school')">1. School Account</button>
-          <button type="button" class="type-btn" id="type-select-user" onclick="window.setAccountFormType('user')">2. User Account</button>
+          <button type="button" class="type-btn" id="type-select-user" onclick="window.setAccountFormType('user')">2. School User Account</button>
         </div>
 
-        <!-- Form: School Account -->
+        <!-- Form: School Account (Level 2) -->
         <form id="form-account-school">
+          <div class="form-group">
+            <label class="form-label" for="acc-school-uid">School Firebase UID (Auth Account) *</label>
+            <input type="text" id="acc-school-uid" class="form-input" placeholder="e.g. SCHOOL_A_UID" required>
+          </div>
           <div class="form-group">
             <label class="form-label" for="acc-school-id">Unique School ID *</label>
             <input type="text" id="acc-school-id" class="form-input" placeholder="e.g. SCHOOL001" required autocapitalize="characters">
@@ -457,18 +501,18 @@
           </div>
         </form>
 
-        <!-- Form: User Account -->
+        <!-- Form: School User Account (Level 3) -->
         <form id="form-account-user" style="display: none;">
           <div class="form-group">
-            <label class="form-label" for="acc-user-school">Assigned School *</label>
+            <label class="form-label" for="acc-user-school">Assigned School ID *</label>
             <select id="acc-user-school" class="form-select" required>
               <!-- Filled with live schools -->
             </select>
             <div class="form-hint">The user is associated with this unique School ID.</div>
           </div>
           <div class="form-group">
-            <label class="form-label" for="acc-user-uid">Firebase UID (Existing Auth Account) *</label>
-            <input type="text" id="acc-user-uid" class="form-input" placeholder="e.g. FSe6FQsJrKaDVqqjcO4jv2EIkfp2" required>
+            <label class="form-label" for="acc-user-uid">User Firebase UID (Auth Account) *</label>
+            <input type="text" id="acc-user-uid" class="form-input" placeholder="e.g. USER_A1_UID" required>
           </div>
           <div class="form-row">
             <div class="form-group">

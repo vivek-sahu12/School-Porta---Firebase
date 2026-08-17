@@ -2,13 +2,16 @@ import {
   auth,
   db,
   signInWithEmailAndPassword,
+  signOut,
   onAuthStateChanged,
   doc,
   getDoc,
   collection,
   query,
   where,
-  getDocs
+  getDocs,
+  setDoc,
+  serverTimestamp
 } from "../firebase.js";
 
 // DOM Elements
@@ -79,10 +82,10 @@ function setLoading(isLoading) {
   }
 }
 
-// 1. Check existing authentication session
+// 1. Session state listener
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    console.log("Authenticated User Session:", user.email);
+    console.log("Authenticated User UID:", user.uid);
   }
 });
 
@@ -106,12 +109,12 @@ if (togglePasswordBtn && passwordInput) {
   });
 }
 
-// 3. Clear errors on input typing
+// 3. Clear errors on typing
 if (emailInput) emailInput.addEventListener("input", clearError);
 if (passwordInput) passwordInput.addEventListener("input", clearError);
 if (schoolCodeInput) schoolCodeInput.addEventListener("input", clearError);
 
-// 4. Handle Form Submission with School & User Status Verification
+// 4. Handle Form Submission with Status & Device Limit Enforcement
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -122,7 +125,7 @@ if (loginForm) {
     const password = passwordInput ? passwordInput.value : "";
 
     if (!schoolCode) {
-      showError("Please enter your School Code or ID.");
+      showError("Please enter your School ID.");
       schoolCodeInput.focus();
       return;
     }
@@ -154,47 +157,80 @@ if (loginForm) {
         let schoolDocSnap = await getDoc(doc(db, "schools", schoolCode));
         let schoolData = schoolDocSnap.exists() ? schoolDocSnap.data() : null;
 
-        if (!schoolData) {
-          // Try query by shortCode
-          const q = query(collection(db, "schools"), where("shortCode", "==", schoolCode));
-          const querySnap = await getDocs(q);
-          if (!querySnap.empty) {
-            schoolData = querySnap.docs[0].data();
-          }
-        }
-
         if (schoolData && schoolData.status === "Inactive") {
           showError("This school institution has been deactivated. Access is suspended.");
           setLoading(false);
           return;
         }
       } catch (checkErr) {
-        console.warn("School status pre-check skipped:", checkErr);
+        console.warn("School status check skipped:", checkErr);
       }
 
       // Step B: Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Step C: Check if User account is Active in Firestore
-      try {
-        const uQuery = query(collection(db, "users"), where("email", "==", email));
-        const uSnap = await getDocs(uQuery);
-        if (!uSnap.empty) {
-          const uData = uSnap.docs[0].data();
-          if (uData.status === "Inactive") {
-            showError("Your user account has been deactivated. Please contact your school administrator.");
+      const user = userCredential.user;
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      // Step C: Verify User Record in Firestore
+      let userDocSnap = await getDoc(doc(db, "users", user.uid));
+      let userData = userDocSnap.exists() ? userDocSnap.data() : null;
+
+      if (userData) {
+        // Check User Status
+        if (userData.status === "Inactive") {
+          await signOut(auth);
+          showError("Your user account has been deactivated. Please contact your school administrator.");
+          setLoading(false);
+          return;
+        }
+
+        // Check School ID Association
+        if (userData.schoolId && userData.schoolId.toUpperCase() !== schoolCode) {
+          await signOut(auth);
+          showError(`Access Denied: This account is not registered under School ID: ${schoolCode}.`);
+          setLoading(false);
+          return;
+        }
+
+        // Step D: Device Limit Enforcement
+        const deviceLimit = userData.deviceLimit || 3;
+        try {
+          const sessionsCol = collection(db, "sessions");
+          const q = query(sessionsCol, where("userUid", "==", user.uid), where("status", "==", "active"));
+          const activeSessionsSnap = await getDocs(q);
+
+          if (activeSessionsSnap.size >= deviceLimit) {
+            await signOut(auth);
+            showError(`Maximum device limit reached (${deviceLimit} active devices). Please log out from another device.`);
             setLoading(false);
             return;
           }
+
+          // Register new active session
+          const sessionId = `SES_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+          const sessionDocRef = doc(db, "sessions", sessionId);
+          await setDoc(sessionDocRef, {
+            sessionId,
+            userUid: user.uid,
+            schoolId: userData.schoolId || schoolCode,
+            deviceId: `DEV_${Math.floor(1000 + Math.random() * 9000)}`,
+            deviceName: navigator.userAgent.includes("Mobile") ? "Mobile Device" : "Desktop Browser",
+            loginTime: serverTimestamp(),
+            lastActive: serverTimestamp(),
+            logoutTime: null,
+            status: "active"
+          });
+        } catch (sesErr) {
+          console.warn("Session tracking registration skipped:", sesErr);
         }
-      } catch (uErr) {
-        console.warn("User status post-check skipped:", uErr);
       }
 
-      if (userCredential.user) {
-        alert("School Portal authenticated successfully! School modules will be unlocked in the upcoming development phase.");
-        setLoading(false);
-      }
+      alert("School Portal authenticated successfully! Active device session registered.");
+      setLoading(false);
     } catch (error) {
       console.error("School Portal Login Error:", error.code, error.message);
       const friendlyMessage = getFriendlyErrorMessage(error.code);
