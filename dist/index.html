@@ -23,15 +23,20 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="/assets/main-kd8TBKSk.js"></script>
+  <script type="module" crossorigin src="/assets/main-BNLyNHc7.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/firebase-BntHPb53.js">
   <link rel="stylesheet" crossorigin href="/assets/main--LhgmAo3.css">
 </head>
 <body>
-  <!-- Full-page auth checking overlay -->
-  <div id="page-loader" class="page-loader">
-    <div class="page-loader-spinner" aria-hidden="true"></div>
-    <p class="page-loader-text">Checking authentication...</p>
+  <noscript>
+    <div style="padding: 20px; background: #fee2e2; color: #991b1b; text-align: center; font-weight: 600;">
+      JavaScript is required to run the School Data Portal. Please enable JavaScript in your browser.
+    </div>
+  </noscript>
+
+  <!-- Local file protocol warning banner (hidden by default, shown if opened via file://) -->
+  <div id="protocol-warning" style="display: none; padding: 12px 20px; background: #fef3c7; color: #92400e; text-align: center; font-size: 0.9rem; border-bottom: 1px solid #fde68a;">
+    ⚠️ <strong>Local Server Required:</strong> Firebase ES Modules cannot run directly from <code>file:///</code>. Please run via <strong>VS Code Live Server</strong>, <code>npm run dev</code>, or any local HTTP server.
   </div>
 
   <main class="auth-wrapper">
@@ -125,5 +130,11 @@
     </div>
   </main>
 
+  <script>
+    if (window.location.protocol === 'file:') {
+      const banner = document.getElementById('protocol-warning');
+      if (banner) banner.style.display = 'block';
+    }
+  </script>
 </body>
 </html>
