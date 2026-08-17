@@ -405,7 +405,7 @@ function refreshSchoolDetailsView() {
   setText("sd-admin-email", s.adminEmail || "No admin contact");
   setText("sd-address", s.address || "Campus Address");
   setText("sd-logourl-display", s.logoUrl || "None configured");
-  setText("sd-students-count", s.studentsCount || 0);
+  setText("sd-student-placeholder-id", s.schoolId);
 
   const statusBadge = document.getElementById("sd-status-badge");
   if (statusBadge) {
