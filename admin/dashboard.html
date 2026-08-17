@@ -120,7 +120,7 @@
           <!-- Welcome Header -->
           <div class="welcome-header">
             <h2>System Overview</h2>
-            <p>Monitor registered school institutions, active user accounts, and real-time device sessions.</p>
+            <p>Monitor registered school institutions, authenticated accounts, and real-time device sessions.</p>
           </div>
 
           <!-- 5 Clean Summary Cards -->
@@ -141,9 +141,9 @@
               <div class="metric-box-sub">Suspended access</div>
             </div>
             <div class="metric-box">
-              <div class="metric-box-title">Total Users</div>
+              <div class="metric-box-title">Total Accounts</div>
               <div class="metric-box-number" id="metric-total-users" style="color: #2563eb;">0</div>
-              <div class="metric-box-sub">Assigned staff accounts</div>
+              <div class="metric-box-sub">Schools & user accounts</div>
             </div>
             <div class="metric-box">
               <div class="metric-box-title">Active Sessions</div>
@@ -156,7 +156,7 @@
           <div class="section-header-bar">
             <div>
               <h2 class="section-title">Schools Directory</h2>
-              <p class="section-subtitle">Manage registered institutions, users, and student records</p>
+              <p class="section-subtitle">Manage registered institutions, authenticated accounts, and student records</p>
             </div>
             <div class="search-filter-box">
               <input type="text" id="dashboard-search-schools" class="form-input" placeholder="Search school name, ID or UID..." style="max-width: 280px; padding: 6px 12px;">
@@ -170,7 +170,7 @@
                   <tr>
                     <th>School</th>
                     <th>School ID</th>
-                    <th>School Firebase UID</th>
+                    <th>Primary School Auth UID</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Sessions</th>
@@ -209,7 +209,7 @@
                   <tr>
                     <th>School Name</th>
                     <th>School ID</th>
-                    <th>School Firebase UID</th>
+                    <th>Primary School Auth UID</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Devices</th>
@@ -227,7 +227,7 @@
 
 
         <!-- ================================================================
-             VIEW 3: DEDICATED SCHOOL MANAGEMENT PAGE (Secondary Sub-Navigation)
+             VIEW 3: DEDICATED SCHOOL MANAGEMENT PAGE (Unified Account Sub-Nav)
              ================================================================ -->
         <section id="view-school-details" class="admin-view">
           <div style="margin-bottom: 16px;">
@@ -246,7 +246,7 @@
                   <div class="school-header-meta">
                     <span id="sd-id" style="font-weight: 700; color: #2563eb;">SCHOOL001</span>
                     <span>&bull;</span>
-                    <span class="chip-uid">UID: <span id="sd-firebase-uid">SCH_UID</span></span>
+                    <span class="chip-uid">Primary Auth UID: <span id="sd-firebase-uid">SCH_UID</span></span>
                     <span>&bull;</span>
                     <span id="sd-status-badge" class="badge badge-active">Active</span>
                     <span>&bull;</span>
@@ -255,7 +255,7 @@
                 </div>
               </div>
               <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" id="sd-edit-school-btn">Edit School</button>
+                <button class="btn btn-secondary btn-sm" id="sd-edit-school-btn">Edit Info</button>
                 <button class="btn btn-secondary btn-sm" id="sd-toggle-status-btn">Toggle Status</button>
                 <button class="btn btn-danger-outline btn-sm" id="sd-delete-btn">Permanently Delete</button>
               </div>
@@ -263,19 +263,70 @@
 
             <!-- Clean Secondary Sub-Navigation Tabs -->
             <div class="subnav-tabs">
-              <button class="subnav-tab active" data-tab="overview" onclick="window.switchSchoolTab('overview')">1. Overview</button>
-              <button class="subnav-tab" data-tab="users" onclick="window.switchSchoolTab('users')">2. School Users</button>
-              <button class="subnav-tab" data-tab="sessions" onclick="window.switchSchoolTab('sessions')">3. Active Sessions</button>
-              <button class="subnav-tab" data-tab="student-data" onclick="window.switchSchoolTab('student-data')">4. Student Data</button>
+              <button class="subnav-tab active" data-tab="account" onclick="window.switchSchoolTab('account')">1. School Account</button>
+              <button class="subnav-tab" data-tab="overview" onclick="window.switchSchoolTab('overview')">2. School Information</button>
+              <button class="subnav-tab" data-tab="users" onclick="window.switchSchoolTab('users')">3. School Users</button>
+              <button class="subnav-tab" data-tab="sessions" onclick="window.switchSchoolTab('sessions')">4. Active Sessions</button>
+              <button class="subnav-tab" data-tab="student-data" onclick="window.switchSchoolTab('student-data')">5. Student Data</button>
             </div>
 
-            <!-- Tab 1: Overview Pane -->
-            <div id="school-tab-overview" class="school-tab-pane active">
+            <!-- Tab 1: Primary School Account Pane -->
+            <div id="school-tab-account" class="school-tab-pane active">
+              <div class="section-panel-card">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+                      Primary Authenticated School Account
+                    </div>
+                    <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">
+                      The primary account representing this institution with its own login, permissions, and device limits.
+                    </div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" id="sd-manage-account-btn">Configure Permissions & Device Limit</button>
+                </div>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <div class="info-label">Account Display Name</div>
+                    <div class="info-value" id="sa-display-name">—</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Primary Login Email</div>
+                    <div class="info-value" id="sa-email">—</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">School Firebase UID (Auth)</div>
+                    <div class="info-value chip-uid" id="sa-uid" style="font-size: 0.85rem;">—</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Account Status</div>
+                    <div class="info-value" id="sa-status"><span class="badge badge-active">Active</span></div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Concurrent Device Limit</div>
+                    <div class="info-value" id="sa-device-limit">3 Devices Allowed</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Active Connected Devices</div>
+                    <div class="info-value" id="sa-active-devices" style="color: #2563eb;">0 / 3 Devices Active</div>
+                  </div>
+                  <div class="info-item" style="grid-column: 1 / -1;">
+                    <div class="info-label">Configured Account Permissions</div>
+                    <div class="info-value" id="sa-permissions-display" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
+                      <!-- Dynamically filled -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Overview / School Information Pane -->
+            <div id="school-tab-overview" class="school-tab-pane">
               <div class="section-panel-card">
                 <div class="panel-header">
                   <div class="panel-title">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
-                    School Information
+                    School Metadata & Campus Information
                   </div>
                   <button class="btn btn-secondary btn-sm" onclick="window.openEditSchoolModal()">Edit Information</button>
                 </div>
@@ -289,7 +340,7 @@
                     <div class="info-value" id="info-school-id" style="color: #2563eb;">—</div>
                   </div>
                   <div class="info-item">
-                    <div class="info-label">School Firebase UID</div>
+                    <div class="info-label">Primary School Firebase UID</div>
                     <div class="info-value" style="font-family: monospace; font-size: 0.85rem;" id="info-school-uid">—</div>
                   </div>
                   <div class="info-item">
@@ -312,16 +363,16 @@
               </div>
             </div>
 
-            <!-- Tab 2: School Users Pane -->
+            <!-- Tab 3: School Users Pane -->
             <div id="school-tab-users" class="school-tab-pane">
               <div class="section-panel-card">
                 <div class="panel-header">
                   <div>
                     <div class="panel-title">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                      School Users
+                      Additional School Users
                     </div>
-                    <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">Manage staff users, permissions, and device access for this school.</div>
+                    <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">Additional staff and teacher accounts belonging to this school.</div>
                   </div>
                   <button class="btn btn-primary btn-sm" id="sd-add-user-btn">+ Add User</button>
                 </div>
@@ -348,7 +399,7 @@
               </div>
             </div>
 
-            <!-- Tab 3: Active Sessions Pane -->
+            <!-- Tab 4: Active Sessions Pane -->
             <div id="school-tab-sessions" class="school-tab-pane">
               <div class="section-panel-card">
                 <div class="panel-header">
@@ -362,7 +413,7 @@
                     <table class="clean-table">
                       <thead>
                         <tr>
-                          <th>User UID</th>
+                          <th>Account / User UID</th>
                           <th>Device Name</th>
                           <th>Device ID</th>
                           <th>Login Time</th>
@@ -380,7 +431,7 @@
               </div>
             </div>
 
-            <!-- Tab 4: Student Data Pane -->
+            <!-- Tab 5: Student Data Pane -->
             <div id="school-tab-student-data" class="school-tab-pane">
               <div class="section-panel-card">
                 <div class="panel-header">
@@ -424,7 +475,7 @@
                     <th>Firebase UID</th>
                     <th>Assigned School ID</th>
                     <th>Status</th>
-                    <th>Device Details</th>
+                    <th>Device Access</th>
                     <th style="text-align: right;">Action</th>
                   </tr>
                 </thead>
@@ -457,7 +508,7 @@
                 <thead>
                   <tr>
                     <th>School</th>
-                    <th>User UID</th>
+                    <th>Account / User UID</th>
                     <th>Device Name</th>
                     <th>Device ID</th>
                     <th>Login Time</th>
@@ -660,7 +711,7 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="acc-school-email">Contact Email</label>
+              <label class="form-label" for="acc-school-email">Primary Login Email</label>
               <input type="email" id="acc-school-email" class="form-input" placeholder="admin@school.edu">
             </div>
             <div class="form-group">
@@ -671,10 +722,71 @@
               </select>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="acc-school-address">Campus Address</label>
-            <input type="text" id="acc-school-address" class="form-input" placeholder="City, State">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="acc-school-address">Campus Address</label>
+              <input type="text" id="acc-school-address" class="form-input" placeholder="City, State">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="acc-school-device-limit">School Account Device Limit</label>
+              <input type="number" id="acc-school-device-limit" class="form-input" min="1" max="15" value="3">
+            </div>
           </div>
+
+          <div style="margin-top: 6px; margin-bottom: 16px;">
+            <label class="form-label">School Account Permissions</label>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">Editable</div>
+                <div class="toggle-desc">Allow editing school info & student records</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="acc-school-perm-editable" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">Add Student</div>
+                <div class="toggle-desc">Allow adding student records</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="acc-school-perm-addStudent" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">Delete Student</div>
+                <div class="toggle-desc">Allow deleting student records</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="acc-school-perm-deleteStudent" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">Excel Export</div>
+                <div class="toggle-desc">Allow downloading data in Excel format</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="acc-school-perm-excelExport" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-title">Reports</div>
+                <div class="toggle-desc">Access to school reports</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="acc-school-perm-reports" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px;">
             <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-add-account')">Cancel</button>
             <button type="submit" class="btn btn-primary">Save School Account</button>
@@ -819,20 +931,20 @@
   </div>
 
 
-  <!-- Modal 3: User Details & Permissions Screen -->
+  <!-- Modal 3: User Details & Permissions Screen (For School Accounts or User Accounts) -->
   <div id="modal-edit-user-perms" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
         <div>
-          <h3 class="modal-title" id="m-perm-user-title">User Management</h3>
-          <div style="font-size: 0.775rem; color: var(--text-muted);" id="m-perm-user-sub">Configure user settings & permissions</div>
+          <h3 class="modal-title" id="m-perm-user-title">Account Management</h3>
+          <div style="font-size: 0.775rem; color: var(--text-muted);" id="m-perm-user-sub">Configure account settings, permissions & device limit</div>
         </div>
         <button class="modal-close" onclick="window.closeModal('modal-edit-user-perms')">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-row" style="margin-bottom: 14px;">
           <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">User Status</label>
+            <label class="form-label">Account Status</label>
             <select id="m-perm-status" class="form-select">
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
@@ -856,7 +968,7 @@
           <div class="toggle-row">
             <div>
               <div class="toggle-title">Editable</div>
-              <div class="toggle-desc">Allow editing student records</div>
+              <div class="toggle-desc">Allow editing school / student records</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="m-perm-editable">
@@ -896,7 +1008,7 @@
           <div class="toggle-row">
             <div>
               <div class="toggle-title">Reports</div>
-              <div class="toggle-desc">Allow viewing student analytics and reports</div>
+              <div class="toggle-desc">Allow viewing analytics and reports</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="m-perm-reports">
@@ -922,7 +1034,7 @@
       </div>
       <div class="modal-body">
         <p style="font-size: 0.875rem; color: #991b1b; font-weight: 600; margin-bottom: 8px;">
-          Warning: This action will permanently remove <span id="del-school-name" style="font-weight: 700;"></span> from Cloud Firestore.
+          Warning: This action will permanently remove <span id="del-school-name" style="font-weight: 700;"></span> and its associated account from Cloud Firestore.
         </p>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
           This action cannot be undone. Please confirm by clicking below:

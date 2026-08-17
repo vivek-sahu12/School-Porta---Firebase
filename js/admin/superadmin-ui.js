@@ -13,7 +13,7 @@ import {
 } from "./firestore-service.js";
 
 /**
- * Super Admin UI Controller - High Quality Professional SaaS with Admin Profile & Audit Logs
+ * Super Admin UI Controller - Unified Authenticated Account Model
  */
 
 // In-Memory Live State
@@ -24,7 +24,7 @@ let liveAdminLogs = [];
 let currentView = "dashboard";
 let selectedSchool = null;
 let selectedUserForPerms = null;
-let currentSchoolTab = "overview";
+let currentSchoolTab = "account";
 let currentSettingsTab = "admin-profile";
 
 // Toast Engine
@@ -145,7 +145,7 @@ function setupLiveListeners() {
     }
   });
 
-  // 2. Subscribe to Users (Level 3)
+  // 2. Subscribe to Users (Both School Accounts & School Users)
   subscribeToUsers((users) => {
     liveUsers = users;
     updateMetrics();
@@ -155,6 +155,7 @@ function setupLiveListeners() {
     renderAllSessionsView();
 
     if (selectedSchool) {
+      refreshSchoolDetailsView();
       renderSchoolUsersList(selectedSchool.schoolId);
     }
   });
@@ -169,6 +170,7 @@ function setupLiveListeners() {
     renderAllSessionsView();
 
     if (selectedSchool) {
+      refreshSchoolDetailsView();
       renderSchoolUsersList(selectedSchool.schoolId);
       renderSchoolSessionsList(selectedSchool.schoolId);
     }
@@ -315,7 +317,7 @@ function renderDashboardSchools(filteredList = null) {
           <div class="empty-box">
             <svg class="empty-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
             <h3>No schools added yet</h3>
-            <p>Configure your first school institution to manage users and active sessions.</p>
+            <p>Configure your first school account to manage its authenticated credentials, users, and active sessions.</p>
             <button class="btn btn-primary btn-sm" onclick="window.openAddAccountModal('school')">+ Add School Account</button>
           </div>
         </td>
@@ -325,7 +327,7 @@ function renderDashboardSchools(filteredList = null) {
   }
 
   tbody.innerHTML = list.map((s) => {
-    const usersCount = liveUsers.filter((u) => u.schoolId === s.schoolId).length;
+    const additionalUsersCount = liveUsers.filter((u) => u.schoolId === s.schoolId && u.type !== "school").length;
     const schoolSessionsCount = liveSessions.filter((ses) => ses.schoolId === s.schoolId).length;
     const initial = s.logoInitial || s.schoolName?.substring(0, 2).toUpperCase() || "SC";
     const avatarHtml = s.logoUrl
@@ -339,14 +341,14 @@ function renderDashboardSchools(filteredList = null) {
             ${avatarHtml}
             <div>
               <div style="font-weight: 700; color: var(--text-main); font-size: 0.925rem;">${s.schoolName || s.name}</div>
-              <div style="font-size: 0.775rem; color: var(--text-muted);">${s.adminEmail || 'No contact email'}</div>
+              <div style="font-size: 0.775rem; color: var(--text-muted);">${s.adminEmail || 'No login email'}</div>
             </div>
           </div>
         </td>
         <td><strong style="color: var(--primary); font-size: 0.85rem;">${s.schoolId}</strong></td>
         <td><span class="chip-uid">${s.firebaseUid || '—'}</span></td>
         <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
-        <td><strong>${usersCount}</strong> Users</td>
+        <td><strong>${additionalUsersCount}</strong> Additional Users</td>
         <td>
           <span class="badge ${schoolSessionsCount > 0 ? 'badge-active' : 'badge-inactive'}">
             ${schoolSessionsCount} Active
@@ -380,7 +382,7 @@ function renderAllSchoolsView(filteredList = null) {
   }
 
   tbody.innerHTML = list.map((s) => {
-    const usersCount = liveUsers.filter((u) => u.schoolId === s.schoolId).length;
+    const additionalUsersCount = liveUsers.filter((u) => u.schoolId === s.schoolId && u.type !== "school").length;
     const schoolSessionsCount = liveSessions.filter((ses) => ses.schoolId === s.schoolId).length;
     const initial = s.logoInitial || s.schoolName?.substring(0, 2).toUpperCase() || "SC";
     const avatarHtml = s.logoUrl
@@ -398,7 +400,7 @@ function renderAllSchoolsView(filteredList = null) {
         <td><strong style="color: var(--primary);">${s.schoolId}</strong></td>
         <td><span class="chip-uid">${s.firebaseUid || '—'}</span></td>
         <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
-        <td>${usersCount} Users</td>
+        <td>${additionalUsersCount} Users</td>
         <td>${schoolSessionsCount} Active</td>
         <td><span style="font-size: 0.825rem; color: var(--text-muted);">${s.address || 'Campus Address'}</span></td>
         <td style="text-align: right;">
@@ -410,67 +412,53 @@ function renderAllSchoolsView(filteredList = null) {
 }
 
 /**
- * View 4: Accounts View (Configured Firebase Accounts)
+ * View 4: Accounts View (Both Primary School Accounts and School Users)
  */
 function renderAccountsView() {
   const tbody = document.getElementById("accounts-all-tbody");
   if (!tbody) return;
 
-  const totalAccounts = liveSchools.length + liveUsers.length;
-  if (totalAccounts === 0) {
+  if (liveUsers.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="7"><div class="empty-box"><h3>No configured accounts</h3><p>Register existing Firebase Authentication accounts as Schools or Users.</p></div></td></tr>
+      <tr><td colspan="7"><div class="empty-box"><h3>No configured accounts</h3><p>Register existing Firebase Authentication accounts as School Accounts or Users.</p></div></td></tr>
     `;
     return;
   }
 
-  let html = "";
+  tbody.innerHTML = liveUsers.map((acc) => {
+    const isSchoolAccount = acc.type === "school";
+    const parentSchool = liveSchools.find((s) => s.schoolId === acc.schoolId);
+    const schoolName = parentSchool ? parentSchool.schoolName : acc.schoolId;
+    const activeSessions = liveSessions.filter((ses) => ses.userUid === acc.firebaseUid).length;
+    const limit = acc.deviceLimit || 3;
 
-  // 1. Level 2: School Accounts
-  liveSchools.forEach((s) => {
-    html += `
+    return `
       <tr>
         <td>
-          <div style="font-weight: 700; color: var(--text-main);">${s.schoolName}</div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">Admin: ${s.adminEmail || 'None'}</div>
+          <div style="font-weight: 700; color: var(--text-main);">${acc.displayName || acc.name}</div>
+          <div style="font-size: 0.725rem; color: var(--text-muted);">${acc.email || 'No email'}</div>
         </td>
-        <td><span class="badge" style="background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;">School Account</span></td>
-        <td><span class="chip-uid">${s.firebaseUid || '—'}</span></td>
-        <td><strong style="color: var(--primary);">${s.schoolId}</strong></td>
-        <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span></td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${s.address || 'Campus Address'}</span></td>
+        <td>
+          <span class="badge" style="${isSchoolAccount ? 'background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;' : 'background:#f3e8ff; color:#7e22ce; border: 1px solid #ddd6fe;'}">
+            ${isSchoolAccount ? 'Primary School Account' : 'School User Account'}
+          </span>
+        </td>
+        <td><span class="chip-uid">${acc.firebaseUid}</span></td>
+        <td><span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">${schoolName} (${acc.schoolId})</span></td>
+        <td><span class="badge ${acc.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${acc.status}</span></td>
+        <td>
+          <span style="font-size: 0.85rem; font-weight: 600; color: ${activeSessions >= limit ? '#dc2626' : '#2563eb'};">
+            ${activeSessions} / ${limit} Devices Active
+          </span>
+        </td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">Manage</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${acc.firebaseUid}')">
+            Permissions & Device Limit
+          </button>
         </td>
       </tr>
     `;
-  });
-
-  // 2. Level 3: School User Accounts
-  liveUsers.forEach((u) => {
-    const parentSchool = liveSchools.find((s) => s.schoolId === u.schoolId);
-    const schoolLabel = parentSchool ? `${parentSchool.schoolName} (${u.schoolId})` : u.schoolId;
-    const userSessions = liveSessions.filter((ses) => ses.userUid === u.firebaseUid).length;
-
-    html += `
-      <tr>
-        <td>
-          <div style="font-weight: 700; color: var(--text-main);">${u.displayName || u.name}</div>
-          <div style="font-size: 0.725rem; color: var(--text-muted);">${u.email || 'No email'}</div>
-        </td>
-        <td><span class="badge" style="background:#f3e8ff; color:#7e22ce; border: 1px solid #ddd6fe;">School User</span></td>
-        <td><span class="chip-uid">${u.firebaseUid}</span></td>
-        <td><span style="font-size: 0.85rem; font-weight: 600;">${schoolLabel}</span></td>
-        <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status}</span></td>
-        <td><span style="font-size: 0.85rem; font-weight: 600; color: ${userSessions >= (u.deviceLimit || 3) ? '#dc2626' : '#2563eb'};">${userSessions} / ${u.deviceLimit || 3} Devices Active</span></td>
-        <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.firebaseUid}')">Permissions</button>
-        </td>
-      </tr>
-    `;
-  });
-
-  tbody.innerHTML = html;
+  }).join("");
 }
 
 /**
@@ -487,7 +475,7 @@ function renderAllSessionsView() {
           <div class="empty-box">
             <svg class="empty-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
             <h3>No active device sessions currently connected</h3>
-            <p>When staff or users log in through their portal, active sessions appear here in real-time.</p>
+            <p>When schools or staff log in through their portal, active sessions appear here in real-time.</p>
           </div>
         </td>
       </tr>
@@ -568,7 +556,7 @@ function renderAdminLogsView(filteredList = null) {
 }
 
 /**
- * Single-Screen Dedicated School Management Page
+ * Dedicated School Management Page Controller
  */
 window.openSchoolDetails = (schoolId) => {
   const school = liveSchools.find((s) => s.schoolId === schoolId);
@@ -576,7 +564,7 @@ window.openSchoolDetails = (schoolId) => {
 
   selectedSchool = school;
   refreshSchoolDetailsView();
-  window.switchSchoolTab("overview");
+  window.switchSchoolTab("account");
 
   window.navigateView("school-details");
   document.getElementById("page-view-title").textContent = `School: ${school.schoolName}`;
@@ -604,7 +592,40 @@ function refreshSchoolDetailsView() {
   setText("sd-firebase-uid", s.firebaseUid || "Not assigned");
   setText("sd-admin-email", s.adminEmail || "No admin contact");
 
-  // Overview Tab Data
+  // Tab 1: Primary School Account Data
+  const schoolAccount = liveUsers.find((u) => u.firebaseUid === s.firebaseUid || (u.type === "school" && u.schoolId === s.schoolId));
+  const schoolAccountActiveSessions = liveSessions.filter((ses) => ses.userUid === s.firebaseUid).length;
+  const schoolDevLimit = schoolAccount?.deviceLimit || 3;
+
+  setText("sa-display-name", schoolAccount?.displayName || `${s.schoolName} (Primary Account)`);
+  setText("sa-email", schoolAccount?.email || s.adminEmail || "None");
+  setText("sa-uid", s.firebaseUid || "None");
+  setText("sa-device-limit", `${schoolDevLimit} Concurrent Devices Allowed`);
+  setText("sa-active-devices", `${schoolAccountActiveSessions} / ${schoolDevLimit} Devices Active`);
+
+  const saStatusBadge = document.getElementById("sa-status");
+  if (saStatusBadge) {
+    saStatusBadge.innerHTML = `<span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span>`;
+  }
+
+  const saPermsContainer = document.getElementById("sa-permissions-display");
+  if (saPermsContainer) {
+    const p = schoolAccount?.permissions || { editable: true, addStudent: true, deleteStudent: true, excelExport: true, reports: true };
+    saPermsContainer.innerHTML = `
+      <span class="badge ${p.editable ? 'badge-active' : 'badge-inactive'}">Editable: ${p.editable ? 'ON' : 'OFF'}</span>
+      <span class="badge ${p.addStudent ? 'badge-active' : 'badge-inactive'}">Add Student: ${p.addStudent ? 'ON' : 'OFF'}</span>
+      <span class="badge ${p.deleteStudent ? 'badge-active' : 'badge-inactive'}">Delete Student: ${p.deleteStudent ? 'ON' : 'OFF'}</span>
+      <span class="badge ${p.excelExport ? 'badge-active' : 'badge-inactive'}">Excel Export: ${p.excelExport ? 'ON' : 'OFF'}</span>
+      <span class="badge ${p.reports ? 'badge-active' : 'badge-inactive'}">Reports: ${p.reports ? 'ON' : 'OFF'}</span>
+    `;
+  }
+
+  const manageSchoolAccountBtn = document.getElementById("sd-manage-account-btn");
+  if (manageSchoolAccountBtn && s.firebaseUid) {
+    manageSchoolAccountBtn.onclick = () => window.openEditUserPermsModal(s.firebaseUid);
+  }
+
+  // Tab 2: Overview Tab Data
   setText("info-school-name", s.schoolName || s.name);
   setText("info-school-id", s.schoolId);
   setText("info-school-uid", s.firebaseUid || "Not assigned");
@@ -625,7 +646,7 @@ function refreshSchoolDetailsView() {
     toggleBtn.textContent = s.status === "Active" ? "Deactivate School" : "Activate School";
     toggleBtn.onclick = async () => {
       try {
-        const newStatus = await toggleSchoolStatus(s.schoolId, s.status);
+        const newStatus = await toggleSchoolStatus(s.schoolId, s.status, s.firebaseUid);
         showToast(`School ${s.schoolName} is now ${newStatus}.`, "success");
       } catch (e) {
         showToast("Failed to toggle status.", "error");
@@ -662,13 +683,13 @@ function renderSchoolUsersList(schoolId) {
   const tbody = document.getElementById("sd-users-tbody");
   if (!tbody) return;
 
-  const users = liveUsers.filter((u) => u.schoolId === schoolId);
+  const users = liveUsers.filter((u) => u.schoolId === schoolId && u.type !== "school");
 
   if (users.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
-          No staff users assigned to this school yet.
+          No additional staff users assigned to this school yet.
           <div style="margin-top: 10px;">
             <button class="btn btn-secondary btn-sm" onclick="window.openAddAccountModal('user', '${schoolId}')">+ Add First User</button>
           </div>
@@ -859,17 +880,36 @@ function setupForms() {
       const adminEmail = document.getElementById("acc-school-email").value.trim();
       const address = document.getElementById("acc-school-address").value.trim();
       const status = document.getElementById("acc-school-status").value;
+      const deviceLimit = document.getElementById("acc-school-device-limit").value;
 
-      if (!schoolId || !schoolName) {
-        showToast("Please provide School ID and School Name.", "error");
+      const permissions = {
+        editable: document.getElementById("acc-school-perm-editable")?.checked || false,
+        addStudent: document.getElementById("acc-school-perm-addStudent")?.checked || false,
+        deleteStudent: document.getElementById("acc-school-perm-deleteStudent")?.checked || false,
+        excelExport: document.getElementById("acc-school-perm-excelExport")?.checked || false,
+        reports: document.getElementById("acc-school-perm-reports")?.checked || false
+      };
+
+      if (!schoolId || !schoolName || !firebaseUid) {
+        showToast("Please provide Firebase UID, School ID, and School Name.", "error");
         return;
       }
 
       try {
-        await saveSchoolAccount({ schoolId, firebaseUid, schoolName, logoUrl, adminEmail, address, status });
+        await saveSchoolAccount({
+          schoolId,
+          firebaseUid,
+          schoolName,
+          logoUrl,
+          adminEmail,
+          address,
+          status,
+          deviceLimit,
+          permissions
+        });
         formSchool.reset();
         closeModal("modal-add-account");
-        showToast(`School Account ${schoolName} (${schoolId}) saved successfully!`, "success");
+        showToast(`School Account ${schoolName} (${schoolId}) configured successfully!`, "success");
       } catch (err) {
         console.error("Save School error:", err);
         showToast("Failed to save school account.", "error");
@@ -903,7 +943,7 @@ function setupForms() {
       }
 
       try {
-        await saveUserAccount({ firebaseUid, schoolId, displayName, email, status, deviceLimit, permissions });
+        await saveUserAccount({ firebaseUid, schoolId, displayName, email, status, deviceLimit, permissions, type: "user" });
         formUser.reset();
         closeModal("modal-add-account");
         showToast(`User account configured under School ID ${schoolId}!`, "success");
@@ -990,7 +1030,7 @@ function setupForms() {
     confirmDeleteBtn.addEventListener("click", async () => {
       if (!selectedSchool) return;
       try {
-        await permanentlyDeleteSchool(selectedSchool.schoolId);
+        await permanentlyDeleteSchool(selectedSchool.schoolId, selectedSchool.firebaseUid);
         showToast(`School ${selectedSchool.schoolName} permanently deleted.`, "success");
         closeModal("modal-delete-school");
         selectedSchool = null;
@@ -1003,7 +1043,7 @@ function setupForms() {
 }
 
 /**
- * Edit User Details & Permissions Modal
+ * Edit User Details & Permissions Modal (For School Account or School User)
  */
 window.openEditUserPermsModal = (firebaseUid) => {
   const user = liveUsers.find((u) => u.firebaseUid === firebaseUid || u.uid === firebaseUid);
@@ -1013,8 +1053,8 @@ window.openEditUserPermsModal = (firebaseUid) => {
   const titleEl = document.getElementById("m-perm-user-title");
   const subEl = document.getElementById("m-perm-user-sub");
 
-  if (titleEl) titleEl.textContent = user.displayName || user.name || "User";
-  if (subEl) subEl.textContent = `School: ${user.schoolId} • UID: ${user.firebaseUid}`;
+  if (titleEl) titleEl.textContent = user.displayName || user.name || "Account";
+  if (subEl) subEl.textContent = `${user.type === 'school' ? 'Primary School Account' : 'School User'} • School: ${user.schoolId} • UID: ${user.firebaseUid}`;
 
   const statusSel = document.getElementById("m-perm-status");
   if (statusSel) statusSel.value = user.status || "Active";
@@ -1022,7 +1062,7 @@ window.openEditUserPermsModal = (firebaseUid) => {
   const devVal = document.getElementById("m-perm-device-limit-val");
   if (devVal) devVal.textContent = user.deviceLimit || 3;
 
-  const perms = user.permissions || { editable: true, addStudent: true, deleteStudent: false, excelExport: true, reports: false };
+  const perms = user.permissions || { editable: true, addStudent: true, deleteStudent: true, excelExport: true, reports: true };
   const setCb = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.checked = !!val;
@@ -1069,14 +1109,15 @@ if (savePermsBtn) {
         email: selectedUserForPerms.email,
         status,
         deviceLimit,
-        permissions
+        permissions,
+        type: selectedUserForPerms.type || "user"
       });
 
       closeModal("modal-edit-user-perms");
-      showToast(`User settings saved for ${selectedUserForPerms.displayName || selectedUserForPerms.firebaseUid}!`, "success");
+      showToast(`Settings saved for ${selectedUserForPerms.displayName || selectedUserForPerms.firebaseUid}!`, "success");
     } catch (e) {
       console.error("Save perms error:", e);
-      showToast("Failed to update user permissions.", "error");
+      showToast("Failed to update permissions.", "error");
     }
   });
 }
