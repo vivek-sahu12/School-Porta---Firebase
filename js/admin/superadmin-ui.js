@@ -27,6 +27,17 @@ let selectedUserForPerms = null;
 let currentSchoolTab = "account";
 let currentSettingsTab = "admin-profile";
 
+// Unsubscribe handles
+let unsubSchools = null;
+let unsubUsers = null;
+let unsubSessions = null;
+let unsubAdminLogs = null;
+
+// Initialization flags
+let isNavBound = false;
+let isFormsBound = false;
+let isDrawerBound = false;
+
 // Toast Engine
 export function showToast(message, type = "success") {
   const container = document.getElementById("toast-container");
@@ -59,13 +70,23 @@ window.openModal = openModal;
 window.closeModal = closeModal;
 
 /**
- * Initialize Super Admin UI
+ * Initialize Super Admin UI (Called Once upon verified Super Admin authentication)
  */
 export function initSuperAdminUI() {
-  setupNavigation();
-  setupForms();
+  if (!isNavBound) {
+    setupNavigation();
+    isNavBound = true;
+  }
+  if (!isFormsBound) {
+    setupForms();
+    isFormsBound = true;
+  }
+  if (!isDrawerBound) {
+    setupMobileDrawer();
+    isDrawerBound = true;
+  }
+
   setupLiveListeners();
-  setupMobileDrawer();
   populateAdminProfile();
 }
 
@@ -77,7 +98,7 @@ function populateAdminProfile() {
   if (!user) return;
 
   const email = user.email || "admin@portal.com";
-  const name = email.split("@")[0].toUpperCase() || "Super Administrator";
+  const name = email.split("@")[0].toUpperCase() || "SUPER ADMIN";
   const uid = user.uid || "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
   const lastLogin = user.metadata?.lastSignInTime 
     ? new Date(user.metadata.lastSignInTime).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) 
@@ -126,8 +147,14 @@ window.signoutOtherSessions = () => {
  * Setup Real-time Firestore Subscriptions
  */
 function setupLiveListeners() {
+  // Clean up any prior subscriptions to avoid listener duplication
+  if (unsubSchools) unsubSchools();
+  if (unsubUsers) unsubUsers();
+  if (unsubSessions) unsubSessions();
+  if (unsubAdminLogs) unsubAdminLogs();
+
   // 1. Subscribe to Schools (Level 2)
-  subscribeToSchools((schools) => {
+  unsubSchools = subscribeToSchools((schools) => {
     liveSchools = schools;
     updateMetrics();
     renderDashboardSchools();
@@ -146,7 +173,7 @@ function setupLiveListeners() {
   });
 
   // 2. Subscribe to Users (Both School Accounts & School Users)
-  subscribeToUsers((users) => {
+  unsubUsers = subscribeToUsers((users) => {
     liveUsers = users;
     updateMetrics();
     renderDashboardSchools();
@@ -161,7 +188,7 @@ function setupLiveListeners() {
   });
 
   // 3. Subscribe to Active Device Sessions
-  subscribeToSessions((sessions) => {
+  unsubSessions = subscribeToSessions((sessions) => {
     liveSessions = sessions;
     updateMetrics();
     renderDashboardSchools();
@@ -177,7 +204,7 @@ function setupLiveListeners() {
   });
 
   // 4. Subscribe to Real-Time Admin Activity / Audit Logs
-  subscribeToAdminLogs((logs) => {
+  unsubAdminLogs = subscribeToAdminLogs((logs) => {
     liveAdminLogs = logs;
     renderAdminLogsView();
   });
@@ -567,7 +594,8 @@ window.openSchoolDetails = (schoolId) => {
   window.switchSchoolTab("account");
 
   window.navigateView("school-details");
-  document.getElementById("page-view-title").textContent = `School: ${school.schoolName}`;
+  const titleEl = document.getElementById("page-view-title");
+  if (titleEl) titleEl.textContent = `School: ${school.schoolName}`;
 };
 
 function refreshSchoolDetailsView() {

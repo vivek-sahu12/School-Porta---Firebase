@@ -16,8 +16,6 @@ const authErrorText = document.getElementById("auth-error-text");
 
 /**
  * Maps Firebase Auth error codes to user-friendly messages
- * @param {string} errorCode 
- * @returns {string} Friendly error message
  */
 function getFriendlyErrorMessage(errorCode) {
   switch (errorCode) {
@@ -39,52 +37,42 @@ function getFriendlyErrorMessage(errorCode) {
   }
 }
 
-/**
- * Display error banner
- * @param {string} message 
- */
 function showError(message) {
-  authErrorText.textContent = message;
-  authError.classList.add("visible");
-}
-
-/**
- * Hide error banner
- */
-function clearError() {
-  authErrorText.textContent = "";
-  authError.classList.remove("visible");
-}
-
-/**
- * Set form loading state
- * @param {boolean} isLoading 
- */
-function setLoading(isLoading) {
-  if (isLoading) {
-    loginBtn.classList.add("is-loading");
-    loginBtn.disabled = true;
-    emailInput.disabled = true;
-    passwordInput.disabled = true;
-    togglePasswordBtn.disabled = true;
-  } else {
-    loginBtn.classList.remove("is-loading");
-    loginBtn.disabled = false;
-    emailInput.disabled = false;
-    passwordInput.disabled = false;
-    togglePasswordBtn.disabled = false;
+  if (authErrorText && authError) {
+    authErrorText.textContent = message;
+    authError.classList.add("visible");
   }
 }
 
-// 1. Listen for existing authenticated session (redirect if Super Admin UID matches)
+function clearError() {
+  if (authErrorText && authError) {
+    authErrorText.textContent = "";
+    authError.classList.remove("visible");
+  }
+}
+
+function setLoading(isLoading) {
+  if (!loginBtn) return;
+  if (isLoading) {
+    loginBtn.classList.add("is-loading");
+    loginBtn.disabled = true;
+    if (emailInput) emailInput.disabled = true;
+    if (passwordInput) passwordInput.disabled = true;
+    if (togglePasswordBtn) togglePasswordBtn.disabled = true;
+  } else {
+    loginBtn.classList.remove("is-loading");
+    loginBtn.disabled = false;
+    if (emailInput) emailInput.disabled = false;
+    if (passwordInput) passwordInput.disabled = false;
+    if (togglePasswordBtn) togglePasswordBtn.disabled = false;
+  }
+}
+
+// 1. Listen for existing authenticated session (Single Listener)
 onAuthStateChanged(auth, (user) => {
-  if (user) {
-    if (user.uid === SUPER_ADMIN_UID) {
-      window.location.replace("./dashboard.html");
-    } else {
-      // Not the authorized Super Admin UID
-      signOut(auth);
-    }
+  if (user && user.uid === SUPER_ADMIN_UID) {
+    // Already authenticated as Super Admin -> redirect immediately to Dashboard
+    window.location.replace("./dashboard.html");
   }
 });
 
@@ -98,12 +86,10 @@ if (togglePasswordBtn && passwordInput) {
       if (eyeIconShow) eyeIconShow.style.display = "none";
       if (eyeIconHide) eyeIconHide.style.display = "block";
       togglePasswordBtn.setAttribute("aria-label", "Hide password");
-      togglePasswordBtn.setAttribute("title", "Hide password");
     } else {
       if (eyeIconShow) eyeIconShow.style.display = "block";
       if (eyeIconHide) eyeIconHide.style.display = "none";
       togglePasswordBtn.setAttribute("aria-label", "Show password");
-      togglePasswordBtn.setAttribute("title", "Show password");
     }
   });
 }
@@ -112,32 +98,31 @@ if (togglePasswordBtn && passwordInput) {
 if (emailInput) emailInput.addEventListener("input", clearError);
 if (passwordInput) passwordInput.addEventListener("input", clearError);
 
-// 4. Handle Form Submission with Super Admin UID verification
+// 4. Handle Form Submission
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     clearError();
 
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = passwordInput ? passwordInput.value : "";
 
-    // Basic client-side validation
     if (!email) {
       showError("Please enter your Super Admin email.");
-      emailInput.focus();
+      if (emailInput) emailInput.focus();
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       showError("Please enter a valid email address.");
-      emailInput.focus();
+      if (emailInput) emailInput.focus();
       return;
     }
 
     if (!password) {
       showError("Please enter your password.");
-      passwordInput.focus();
+      if (passwordInput) passwordInput.focus();
       return;
     }
 
@@ -148,11 +133,11 @@ if (loginForm) {
       const user = userCredential.user;
 
       if (user) {
-        // Enforce Super Admin UID Check for Admin Panel Access
         if (user.uid === SUPER_ADMIN_UID) {
+          // Authorized Super Admin
           window.location.replace("./dashboard.html");
         } else {
-          // Deny access if authenticated UID does not match Super Admin
+          // Deny access if authenticated UID does not match Super Admin UID
           await signOut(auth);
           showError("Access Denied: This account is not authorized to access the Super Admin Panel.");
           setLoading(false);

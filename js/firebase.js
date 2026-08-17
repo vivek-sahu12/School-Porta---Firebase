@@ -1,10 +1,12 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
   signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  browserLocalPersistence,
+  setPersistence
 } from "firebase/auth";
 import {
   getFirestore,
@@ -36,10 +38,15 @@ const firebaseConfig = {
   measurementId: "G-NR75D6CDF7"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase App strictly once
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Explicitly set browserLocalPersistence to guarantee session persistence across page reloads
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn("Could not set persistence to browserLocalPersistence:", err);
+});
 
 export {
   app,
@@ -50,6 +57,8 @@ export {
   onAuthStateChanged,
   signOut,
   sendPasswordResetEmail,
+  browserLocalPersistence,
+  setPersistence,
   // Firestore
   collection,
   doc,
