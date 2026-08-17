@@ -1,4 +1,15 @@
-import { auth, signInWithEmailAndPassword, onAuthStateChanged } from "../firebase.js";
+import {
+  auth,
+  db,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs
+} from "../firebase.js";
 
 // DOM Elements
 const loginForm = document.getElementById("user-login-form");
@@ -14,8 +25,6 @@ const authErrorText = document.getElementById("auth-error-text");
 
 /**
  * Maps Firebase Auth error codes to user-friendly messages
- * @param {string} errorCode 
- * @returns {string} Friendly error message
  */
 function getFriendlyErrorMessage(errorCode) {
   switch (errorCode) {
@@ -37,10 +46,6 @@ function getFriendlyErrorMessage(errorCode) {
   }
 }
 
-/**
- * Display error banner
- * @param {string} message 
- */
 function showError(message) {
   if (authErrorText && authError) {
     authErrorText.textContent = message;
@@ -48,9 +53,6 @@ function showError(message) {
   }
 }
 
-/**
- * Hide error banner
- */
 function clearError() {
   if (authErrorText && authError) {
     authErrorText.textContent = "";
@@ -58,10 +60,6 @@ function clearError() {
   }
 }
 
-/**
- * Set form loading state
- * @param {boolean} isLoading 
- */
 function setLoading(isLoading) {
   if (!loginBtn) return;
   if (isLoading) {
@@ -84,7 +82,6 @@ function setLoading(isLoading) {
 // 1. Check existing authentication session
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    // Session is active
     console.log("Authenticated User Session:", user.email);
   }
 });
@@ -114,17 +111,17 @@ if (emailInput) emailInput.addEventListener("input", clearError);
 if (passwordInput) passwordInput.addEventListener("input", clearError);
 if (schoolCodeInput) schoolCodeInput.addEventListener("input", clearError);
 
-// 4. Handle Form Submission
+// 4. Handle Form Submission with School & User Status Verification
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     clearError();
 
-    const schoolCode = schoolCodeInput ? schoolCodeInput.value.trim() : "";
-    const email = emailInput ? emailInput.value.trim() : "";
+    const schoolCode = schoolCodeInput ? schoolCodeInput.value.trim().toUpperCase() : "";
+    const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
     const password = passwordInput ? passwordInput.value : "";
 
-    if (schoolCodeInput && !schoolCode) {
+    if (!schoolCode) {
       showError("Please enter your School Code or ID.");
       schoolCodeInput.focus();
       return;
@@ -152,10 +149,50 @@ if (loginForm) {
     setLoading(true);
 
     try {
+      // Step A: Check if school exists and is Active in Firestore
+      try {
+        let schoolDocSnap = await getDoc(doc(db, "schools", schoolCode));
+        let schoolData = schoolDocSnap.exists() ? schoolDocSnap.data() : null;
+
+        if (!schoolData) {
+          // Try query by shortCode
+          const q = query(collection(db, "schools"), where("shortCode", "==", schoolCode));
+          const querySnap = await getDocs(q);
+          if (!querySnap.empty) {
+            schoolData = querySnap.docs[0].data();
+          }
+        }
+
+        if (schoolData && schoolData.status === "Inactive") {
+          showError("This school institution has been deactivated. Access is suspended.");
+          setLoading(false);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn("School status pre-check skipped:", checkErr);
+      }
+
+      // Step B: Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Step C: Check if User account is Active in Firestore
+      try {
+        const uQuery = query(collection(db, "users"), where("email", "==", email));
+        const uSnap = await getDocs(uQuery);
+        if (!uSnap.empty) {
+          const uData = uSnap.docs[0].data();
+          if (uData.status === "Inactive") {
+            showError("Your user account has been deactivated. Please contact your school administrator.");
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (uErr) {
+        console.warn("User status post-check skipped:", uErr);
+      }
+
       if (userCredential.user) {
-        // School portal user authenticated
-        alert("School Portal authenticated successfully! School modules will be unlocked in the next development phase.");
+        alert("School Portal authenticated successfully! School modules will be unlocked in the upcoming development phase.");
         setLoading(false);
       }
     } catch (error) {

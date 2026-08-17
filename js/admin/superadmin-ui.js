@@ -1,8 +1,39 @@
-import { superAdminState } from "./superadmin-data.js";
+import {
+  subscribeToSchools,
+  subscribeToUsers,
+  subscribeToSessions,
+  subscribeToActivityLogs,
+  createSchool,
+  updateSchool,
+  toggleSchoolStatus,
+  permanentlyDeleteSchool,
+  createUser,
+  updateUser,
+  updateUserPermissions,
+  updateUserDeviceLimit,
+  toggleUserStatus,
+  sendUserPasswordReset,
+  terminateSession
+} from "./firestore-service.js";
 
 /**
- * Super Admin UI Controller & View Manager
+ * Super Admin UI Controller
+ * Connected directly to Cloud Firestore & Firebase Storage. Zero dummy data.
  */
+
+// Live in-memory state updated via Firestore listeners
+let liveSchools = [];
+let liveUsers = [];
+let liveSessions = [];
+let liveLogs = [];
+
+// UI State
+let currentView = "overview";
+let currentTab = "tab-schools-list";
+let selectedSchoolForDetails = null;
+let selectedUserForPermissions = null;
+let sessionToTerminate = null;
+let schoolToDeletePermanently = null;
 
 // Toast Notification Engine
 export function showToast(message, type = "info") {
@@ -36,41 +67,67 @@ export function showToast(message, type = "info") {
 // Modal Helpers
 export function openModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.classList.add("open");
-  }
+  if (modal) modal.classList.add("open");
 }
 
 export function closeModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (modal) {
-    modal.classList.remove("open");
-  }
+  if (modal) modal.classList.remove("open");
 }
 
-// Global active view state
-let currentView = "overview";
-let currentTab = "tab-schools-list";
-let activePermissionSchool = "SCH-1001";
-let sessionToTerminate = null;
-
 /**
- * Initialize Super Admin UI
+ * Initialize Super Admin UI & Live Firestore Listeners
  */
 export function initSuperAdminUI() {
   setupNavigation();
   setupTabs();
   setupModals();
-  setupOverview();
-  setupSchoolsAndUsers();
-  setupPermissions();
-  setupActiveSessions();
-  setupActivityLogs();
+  setupForms();
+  setupLiveListeners();
   setupSidebarCollapse();
 }
 
 /**
- * Setup Main Left Sidebar View Navigation
+ * Setup Real-time Firestore Subscriptions
+ */
+function setupLiveListeners() {
+  // 1. Schools Listener
+  subscribeToSchools((schools) => {
+    liveSchools = schools;
+    updateMetricsUI();
+    renderSchoolsTable();
+    populateSchoolSelectDropdowns();
+    if (selectedSchoolForDetails) {
+      window.viewSchoolDetails(selectedSchoolForDetails.id);
+    }
+  });
+
+  // 2. Users Listener
+  subscribeToUsers((users) => {
+    liveUsers = users;
+    updateMetricsUI();
+    renderUsersTable();
+    renderPermissionsMatrix();
+  });
+
+  // 3. Sessions Listener
+  subscribeToSessions((sessions) => {
+    liveSessions = sessions;
+    updateMetricsUI();
+    renderActiveSessions();
+    renderOverviewSessionsPreview();
+  });
+
+  // 4. Activity Logs Listener
+  subscribeToActivityLogs((logs) => {
+    liveLogs = logs;
+    renderActivityLogs();
+    renderOverviewRecentLogs();
+  });
+}
+
+/**
+ * Main Sidebar View Navigation
  */
 function setupNavigation() {
   const navLinks = document.querySelectorAll("[data-nav-view]");
@@ -80,7 +137,7 @@ function setupNavigation() {
   const viewTitles = {
     overview: "Overview & Control Center",
     "schools-users": "Schools & Users Management",
-    permissions: "Centralized Permissions Matrix",
+    permissions: "Individual Permissions Matrix",
     sessions: "Active Sessions & Device Monitoring",
     logs: "System Activity & Edit Audit Trail"
   };
@@ -93,11 +150,9 @@ function setupNavigation() {
 
       currentView = targetView;
 
-      // Update Nav active classes
       navLinks.forEach((l) => l.classList.remove("active"));
       link.classList.add("active");
 
-      // Update View sections
       viewSections.forEach((section) => {
         if (section.id === `view-${targetView}`) {
           section.classList.add("active");
@@ -106,12 +161,10 @@ function setupNavigation() {
         }
       });
 
-      // Update Header Subtitle
       if (headerSubtitle && viewTitles[targetView]) {
         headerSubtitle.textContent = viewTitles[targetView];
       }
 
-      // Close mobile drawer on selection
       const sidebar = document.getElementById("sidebar");
       const backdrop = document.getElementById("sidebar-backdrop");
       if (sidebar && backdrop) {
@@ -119,7 +172,6 @@ function setupNavigation() {
         backdrop.classList.remove("open");
       }
 
-      // Scroll to top of main wrapper
       const mainWrapper = document.querySelector(".main-wrapper");
       if (mainWrapper) mainWrapper.scrollTop = 0;
     });
@@ -170,133 +222,134 @@ function setupTabs() {
 }
 
 /**
- * Setup Modal Event Listeners
+ * Setup Forms (Add School, Create User)
  */
-function setupModals() {
-  // Generic close buttons
-  document.querySelectorAll("[data-modal-close]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const modalId = btn.getAttribute("data-modal-close");
-      closeModal(modalId);
-    });
-  });
-
-  // Close on clicking backdrop
-  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => {
-    backdrop.addEventListener("click", (e) => {
-      if (e.target === backdrop) {
-        backdrop.classList.remove("open");
+function setupForms() {
+  // 1. Create School Form Submission
+  const formCreateSchool = document.getElementById("form-create-school");
+  if (formCreateSchool) {
+    formCreateSchool.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = formCreateSchool.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Provisioning School...";
       }
-    });
-  });
 
-  // Force Logout Confirm Action
-  const confirmTerminateBtn = document.getElementById("confirm-terminate-session-btn");
-  if (confirmTerminateBtn) {
-    confirmTerminateBtn.addEventListener("click", () => {
-      if (sessionToTerminate) {
-        // Remove or update session state
-        const idx = superAdminState.sessions.findIndex((s) => s.id === sessionToTerminate.id);
-        if (idx !== -1) {
-          superAdminState.sessions.splice(idx, 1);
-          superAdminState.metrics.activeSessions = Math.max(0, superAdminState.metrics.activeSessions - 1);
-          renderActiveSessions();
-          updateMetricsUI();
-          showToast(`Session for ${sessionToTerminate.userName} was terminated successfully.`, "success");
+      const name = document.getElementById("new-school-name").value.trim();
+      const schoolId = document.getElementById("new-school-id").value.trim();
+      const adminEmail = document.getElementById("new-school-admin").value.trim();
+      const address = document.getElementById("new-school-address").value.trim();
+      const status = document.getElementById("new-school-status").value;
+      const logoInput = document.getElementById("new-school-logo");
+      const logoFile = logoInput?.files?.[0] || null;
+
+      if (!name || !adminEmail) {
+        showToast("Please enter school name and admin email.", "warning");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Create & Provision School";
+        }
+        return;
+      }
+
+      try {
+        await createSchool({
+          name,
+          shortCode: name.substring(0, 3).toUpperCase(),
+          schoolId,
+          adminEmail,
+          address,
+          status,
+          logoFile
+        });
+
+        formCreateSchool.reset();
+        showToast(`School "${name}" registered successfully!`, "success");
+        // Switch back to schools tab
+        document.querySelector('[data-tab="tab-schools-list"]')?.click();
+      } catch (err) {
+        console.error("Error creating school:", err);
+        showToast("Failed to create school. Please try again.", "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Create & Provision School";
         }
       }
-      closeModal("modal-force-logout");
-      sessionToTerminate = null;
     });
   }
+
+  // 2. Create User Form Submission
+  const formCreateUser = document.getElementById("form-create-user");
+  if (formCreateUser) {
+    formCreateUser.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = formCreateUser.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Creating Account...";
+      }
+
+      const name = document.getElementById("new-user-name").value.trim();
+      const email = document.getElementById("new-user-email").value.trim();
+      const schoolSelect = document.getElementById("new-user-school");
+      const schoolId = schoolSelect?.value || "";
+      const schoolName = schoolSelect?.options[schoolSelect.selectedIndex]?.text || "School";
+      const role = document.getElementById("new-user-role").value;
+      const status = document.getElementById("new-user-status").value;
+      const deviceLimit = document.getElementById("new-user-device-limit")?.value || 3;
+
+      if (!name || !email || !schoolId) {
+        showToast("Please fill all required fields and select an assigned school.", "warning");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Create User Account";
+        }
+        return;
+      }
+
+      try {
+        await createUser({
+          schoolId,
+          schoolName,
+          name,
+          email,
+          role,
+          status,
+          deviceLimit: Number(deviceLimit) || 3,
+          permissions: {
+            editable: true,
+            addStudent: true,
+            deleteStudent: false,
+            excelExport: true,
+            reports: false
+          }
+        });
+
+        formCreateUser.reset();
+        showToast(`User "${name}" created under ${schoolName}!`, "success");
+        document.querySelector('[data-tab="tab-users-list"]')?.click();
+      } catch (err) {
+        console.error("Error creating user:", err);
+        showToast("Failed to create user account. Please try again.", "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Create User Account";
+        }
+      }
+    });
+  }
+
+  // Search & Filter listeners
+  setupFilters();
 }
 
 /**
- * 1. Overview Screen
+ * Setup Search & Filter Handlers
  */
-function setupOverview() {
-  updateMetricsUI();
-  renderOverviewRecentLogs();
-  renderOverviewSessionsPreview();
-}
-
-function updateMetricsUI() {
-  const m = superAdminState.metrics;
-  const setVal = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-  };
-
-  setVal("metric-total-schools", m.totalSchools);
-  setVal("metric-active-schools", m.activeSchools);
-  setVal("metric-inactive-schools", m.inactiveSchools);
-  setVal("metric-total-users", m.totalUsers);
-  setVal("metric-active-sessions", m.activeSessions);
-
-  // Badge count on sidebar
-  const badgeSessions = document.getElementById("sidebar-badge-sessions");
-  if (badgeSessions) badgeSessions.textContent = m.activeSessions;
-  const badgeSchools = document.getElementById("sidebar-badge-schools");
-  if (badgeSchools) badgeSchools.textContent = m.totalSchools;
-}
-
-function renderOverviewRecentLogs() {
-  const container = document.getElementById("overview-recent-logs-list");
-  if (!container) return;
-
-  const logs = superAdminState.activityLogs.slice(0, 4);
-  container.innerHTML = logs.map(log => `
-    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border-subtle);">
-      <div>
-        <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-main);">
-          <span class="action-badge action-badge-${log.action.toLowerCase()}">${log.action}</span>
-          ${log.user} &bull; <span style="color: var(--color-text-muted); font-weight: normal;">${log.module}</span>
-        </div>
-        <div style="font-size: 0.775rem; color: var(--color-text-muted); margin-top: 4px;">
-          ${log.recordName} (${log.field})
-        </div>
-      </div>
-      <div style="font-size: 0.75rem; color: var(--color-text-subtle); white-space: nowrap;">
-        ${log.timestamp.split(',')[1] || log.timestamp}
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderOverviewSessionsPreview() {
-  const container = document.getElementById("overview-sessions-preview-list");
-  if (!container) return;
-
-  const sessions = superAdminState.sessions.slice(0, 4);
-  container.innerHTML = sessions.map(ses => `
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border-subtle);">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="width: 32px; height: 32px; border-radius: 6px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center;">
-          <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            ${ses.deviceType === 'Mobile' 
-              ? '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>' 
-              : '<rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>'}
-          </svg>
-        </div>
-        <div>
-          <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-main);">
-            ${ses.userName} ${ses.isCurrent ? '<span class="current-session-indicator">You</span>' : ''}
-          </div>
-          <div style="font-size: 0.75rem; color: var(--color-text-muted);">${ses.schoolName}</div>
-        </div>
-      </div>
-      <span class="badge ${ses.status === 'Active' ? 'badge-active' : 'badge-idle'}">${ses.status}</span>
-    </div>
-  `).join("");
-}
-
-/**
- * 2. Schools & Users Section
- */
-function setupSchoolsAndUsers() {
-  renderSchoolsTable();
-  renderUsersTable();
-
+function setupFilters() {
   // Search Schools
   const searchSchoolsInput = document.getElementById("search-schools-input");
   const filterSchoolsStatus = document.getElementById("filter-schools-status");
@@ -304,9 +357,9 @@ function setupSchoolsAndUsers() {
     const handleFilter = () => {
       const q = searchSchoolsInput.value.toLowerCase().trim();
       const status = filterSchoolsStatus.value;
-      const filtered = superAdminState.schools.filter((sch) => {
-        const matchesQ = sch.name.toLowerCase().includes(q) || sch.id.toLowerCase().includes(q) || sch.assignedAdmin.toLowerCase().includes(q);
-        const matchesStatus = status === "ALL" || sch.status === status;
+      const filtered = liveSchools.filter((s) => {
+        const matchesQ = (s.name || "").toLowerCase().includes(q) || (s.id || "").toLowerCase().includes(q) || (s.adminEmail || "").toLowerCase().includes(q);
+        const matchesStatus = status === "ALL" || s.status === status;
         return matchesQ && matchesStatus;
       });
       renderSchoolsTable(filtered);
@@ -322,8 +375,8 @@ function setupSchoolsAndUsers() {
     const handleFilter = () => {
       const q = searchUsersInput.value.toLowerCase().trim();
       const role = filterUsersRole.value;
-      const filtered = superAdminState.users.filter((u) => {
-        const matchesQ = u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.schoolName.toLowerCase().includes(q);
+      const filtered = liveUsers.filter((u) => {
+        const matchesQ = (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q) || (u.schoolName || "").toLowerCase().includes(q);
         const matchesRole = role === "ALL" || u.role === role;
         return matchesQ && matchesRole;
       });
@@ -333,218 +386,355 @@ function setupSchoolsAndUsers() {
     filterUsersRole.addEventListener("change", handleFilter);
   }
 
-  // Create School Form Submission
-  const formCreateSchool = document.getElementById("form-create-school");
-  if (formCreateSchool) {
-    formCreateSchool.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const name = document.getElementById("new-school-name").value.trim();
-      const id = document.getElementById("new-school-id").value.trim() || `SCH-${Math.floor(1000 + Math.random() * 9000)}`;
-      const admin = document.getElementById("new-school-admin").value.trim();
-      const address = document.getElementById("new-school-address").value.trim();
-      const status = document.getElementById("new-school-status").value;
-
-      if (!name || !admin) {
-        showToast("Please fill in the required fields (School Name and Admin Email).", "warning");
-        return;
-      }
-
-      const newSchool = {
-        id,
-        name,
-        shortCode: name.substring(0, 3).toUpperCase(),
-        logo: name.substring(0, 2).toUpperCase(),
-        status,
-        usersCount: 1,
-        assignedAdmin: admin,
-        createdDate: "Today",
-        address: address || "Campus address",
-        phone: "+91 98000 00000",
-        lastActivity: "Just now"
-      };
-
-      // Add to state
-      superAdminState.schools.unshift(newSchool);
-      superAdminState.metrics.totalSchools += 1;
-      if (status === "Active") superAdminState.metrics.activeSchools += 1;
-      else superAdminState.metrics.inactiveSchools += 1;
-
-      // Add default permission entry
-      superAdminState.permissions[id] = {
-        schoolName: name,
-        editable: true,
-        addStudent: true,
-        deleteStudent: false,
-        excelExport: true,
-        reports: true,
-        deviceLimit: 5
-      };
-
-      // Log activity
-      superAdminState.activityLogs.unshift({
-        id: `LOG-${Math.floor(5000 + Math.random() * 5000)}`,
-        user: "Super Admin",
-        userEmail: "admin@schoolportal.com",
-        school: name,
-        action: "Add",
-        module: "Schools",
-        recordName: `${name} (${id})`,
-        field: "Creation",
-        oldValue: "None",
-        newValue: "Created & Provisioned",
-        timestamp: "Just now"
+  // Search Sessions
+  const searchSessionsInput = document.getElementById("search-sessions-input");
+  const filterSessionsDevice = document.getElementById("filter-sessions-device");
+  const filterSessionsStatus = document.getElementById("filter-sessions-status");
+  if (searchSessionsInput && filterSessionsDevice && filterSessionsStatus) {
+    const handleFilter = () => {
+      const q = searchSessionsInput.value.toLowerCase().trim();
+      const dev = filterSessionsDevice.value;
+      const st = filterSessionsStatus.value;
+      const filtered = liveSessions.filter((s) => {
+        const matchesQ = (s.userName || "").toLowerCase().includes(q) || (s.userEmail || "").toLowerCase().includes(q) || (s.schoolName || "").toLowerCase().includes(q);
+        const matchesDev = dev === "ALL" || s.deviceType === dev;
+        const matchesSt = st === "ALL" || s.status === st;
+        return matchesQ && matchesDev && matchesSt;
       });
+      renderActiveSessions(filtered);
+    };
+    searchSessionsInput.addEventListener("input", handleFilter);
+    filterSessionsDevice.addEventListener("change", handleFilter);
+    filterSessionsStatus.addEventListener("change", handleFilter);
+  }
 
-      renderSchoolsTable();
-      populatePermissionsSchoolPicker();
-      updateMetricsUI();
-      formCreateSchool.reset();
-      showToast(`School "${name}" created successfully!`, "success");
+  // Search Logs
+  const searchLogsInput = document.getElementById("search-logs-input");
+  const filterLogsModule = document.getElementById("filter-logs-module");
+  const filterLogsAction = document.getElementById("filter-logs-action");
+  if (searchLogsInput && filterLogsModule && filterLogsAction) {
+    const handleFilter = () => {
+      const q = searchLogsInput.value.toLowerCase().trim();
+      const mod = filterLogsModule.value;
+      const act = filterLogsAction.value;
+      const filtered = liveLogs.filter((log) => {
+        const matchesQ = (log.user || "").toLowerCase().includes(q) || (log.school || "").toLowerCase().includes(q) || (log.recordName || "").toLowerCase().includes(q) || (log.field || "").toLowerCase().includes(q);
+        const matchesMod = mod === "ALL" || log.module === mod;
+        const matchesAct = act === "ALL" || log.action === act;
+        return matchesQ && matchesMod && matchesAct;
+      });
+      renderActivityLogs(filtered);
+    };
+    searchLogsInput.addEventListener("input", handleFilter);
+    filterLogsModule.addEventListener("change", handleFilter);
+    filterLogsAction.addEventListener("change", handleFilter);
+  }
+}
 
-      // Switch back to schools tab
-      document.querySelector('[data-tab="tab-schools-list"]').click();
+/**
+ * Setup Modal Event Listeners
+ */
+function setupModals() {
+  document.querySelectorAll("[data-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const modalId = btn.getAttribute("data-modal-close");
+      closeModal(modalId);
+    });
+  });
+
+  document.querySelectorAll(".modal-backdrop").forEach((backdrop) => {
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) backdrop.classList.remove("open");
+    });
+  });
+
+  // Force Logout Confirm
+  const confirmTerminateBtn = document.getElementById("confirm-terminate-session-btn");
+  if (confirmTerminateBtn) {
+    confirmTerminateBtn.addEventListener("click", async () => {
+      if (sessionToTerminate) {
+        try {
+          await terminateSession(sessionToTerminate.id, sessionToTerminate.userEmail, sessionToTerminate.schoolName);
+          showToast(`Session for ${sessionToTerminate.userName} terminated.`, "success");
+        } catch (e) {
+          showToast("Failed to terminate session.", "error");
+        }
+      }
+      closeModal("modal-force-logout");
+      sessionToTerminate = null;
     });
   }
 
-  // Create User Form Submission
-  const formCreateUser = document.getElementById("form-create-user");
-  if (formCreateUser) {
-    formCreateUser.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const name = document.getElementById("new-user-name").value.trim();
-      const email = document.getElementById("new-user-email").value.trim();
-      const schoolSelect = document.getElementById("new-user-school");
-      const schoolId = schoolSelect.value;
-      const schoolName = schoolSelect.options[schoolSelect.selectedIndex]?.text || "School";
-      const role = document.getElementById("new-user-role").value;
-      const status = document.getElementById("new-user-status").value;
-
-      if (!name || !email) {
-        showToast("Please fill in required fields.", "warning");
-        return;
+  // Danger Zone: Type School ID Confirmation Input
+  const deleteConfirmInput = document.getElementById("delete-school-confirm-input");
+  const deleteConfirmBtn = document.getElementById("confirm-permanent-delete-school-btn");
+  if (deleteConfirmInput && deleteConfirmBtn) {
+    deleteConfirmInput.addEventListener("input", () => {
+      if (schoolToDeletePermanently && deleteConfirmInput.value.trim().toUpperCase() === schoolToDeletePermanently.id.toUpperCase()) {
+        deleteConfirmBtn.disabled = false;
+      } else {
+        deleteConfirmBtn.disabled = true;
       }
+    });
 
-      const newUser = {
-        id: `USR-${Math.floor(100 + Math.random() * 900)}`,
-        name,
-        email,
-        schoolId,
-        schoolName,
-        role,
-        status,
-        lastLogin: "Never"
+    deleteConfirmBtn.addEventListener("click", async () => {
+      if (!schoolToDeletePermanently) return;
+      deleteConfirmBtn.disabled = true;
+      deleteConfirmBtn.textContent = "Deleting...";
+
+      try {
+        await permanentlyDeleteSchool(schoolToDeletePermanently.id, schoolToDeletePermanently.name);
+        showToast(`School "${schoolToDeletePermanently.name}" was permanently deleted.`, "success");
+        closeModal("modal-danger-delete-school");
+        closeModal("modal-school-detail");
+        schoolToDeletePermanently = null;
+      } catch (err) {
+        console.error("Permanent deletion error:", err);
+        showToast("Failed to delete school. Please check permissions.", "error");
+      } finally {
+        deleteConfirmBtn.disabled = true;
+        deleteConfirmBtn.textContent = "Permanently Delete";
+      }
+    });
+  }
+
+  // User Individual Permissions Save Modal Button
+  const saveUserPermsBtn = document.getElementById("save-user-permissions-modal-btn");
+  if (saveUserPermsBtn) {
+    saveUserPermsBtn.addEventListener("click", async () => {
+      if (!selectedUserForPermissions) return;
+      saveUserPermsBtn.disabled = true;
+      saveUserPermsBtn.textContent = "Saving...";
+
+      const permissions = {
+        editable: document.getElementById("modal-perm-editable")?.checked || false,
+        addStudent: document.getElementById("modal-perm-addStudent")?.checked || false,
+        deleteStudent: document.getElementById("modal-perm-deleteStudent")?.checked || false,
+        excelExport: document.getElementById("modal-perm-excelExport")?.checked || false,
+        reports: document.getElementById("modal-perm-reports")?.checked || false
       };
 
-      superAdminState.users.unshift(newUser);
-      superAdminState.metrics.totalUsers += 1;
-      updateMetricsUI();
-      renderUsersTable();
+      const deviceLimit = Number(document.getElementById("modal-device-limit-val")?.textContent) || 3;
 
-      // Log activity
-      superAdminState.activityLogs.unshift({
-        id: `LOG-${Math.floor(5000 + Math.random() * 5000)}`,
-        user: "Super Admin",
-        userEmail: "admin@schoolportal.com",
-        school: schoolName,
-        action: "Add",
-        module: "Users",
-        recordName: `${name} (${email})`,
-        field: "Account Creation",
-        oldValue: "None",
-        newValue: `Role: ${role}`,
-        timestamp: "Just now"
-      });
-
-      formCreateUser.reset();
-      showToast(`User account for "${name}" created.`, "success");
-      document.querySelector('[data-tab="tab-users-list"]').click();
+      try {
+        await updateUserPermissions(selectedUserForPermissions.id, permissions, selectedUserForPermissions.name, selectedUserForPermissions.schoolName);
+        await updateUserDeviceLimit(selectedUserForPermissions.id, deviceLimit, selectedUserForPermissions.name, selectedUserForPermissions.schoolName);
+        showToast(`Permissions updated for ${selectedUserForPermissions.name}!`, "success");
+        closeModal("modal-user-permissions");
+      } catch (err) {
+        console.error("Error saving user permissions:", err);
+        showToast("Failed to save permissions.", "error");
+      } finally {
+        saveUserPermsBtn.disabled = false;
+        saveUserPermsBtn.textContent = "Save Changes";
+      }
     });
   }
 }
 
-function renderSchoolsTable(schools = superAdminState.schools) {
+/**
+ * 1. Overview Screen Updates
+ */
+function updateMetricsUI() {
+  const totalSchools = liveSchools.length;
+  const activeSchools = liveSchools.filter((s) => s.status === "Active").length;
+  const inactiveSchools = liveSchools.filter((s) => s.status === "Inactive").length;
+  const totalUsers = liveUsers.length;
+  const activeSessions = liveSessions.filter((s) => s.status === "Active").length;
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  setVal("metric-total-schools", totalSchools);
+  setVal("metric-active-schools", activeSchools);
+  setVal("metric-inactive-schools", inactiveSchools);
+  setVal("metric-total-users", totalUsers);
+  setVal("metric-active-sessions", activeSessions);
+
+  const badgeSessions = document.getElementById("sidebar-badge-sessions");
+  if (badgeSessions) badgeSessions.textContent = activeSessions;
+  const badgeSchools = document.getElementById("sidebar-badge-schools");
+  if (badgeSchools) badgeSchools.textContent = totalSchools;
+}
+
+function renderOverviewRecentLogs() {
+  const container = document.getElementById("overview-recent-logs-list");
+  if (!container) return;
+
+  if (liveLogs.length === 0) {
+    container.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--color-text-muted); font-size: 0.85rem;">No activity recorded yet.</div>`;
+    return;
+  }
+
+  const logs = liveLogs.slice(0, 4);
+  container.innerHTML = logs.map((log) => `
+    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border-subtle);">
+      <div>
+        <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-main);">
+          <span class="action-badge action-badge-${(log.action || 'edit').toLowerCase()}">${log.action}</span>
+          ${log.user} &bull; <span style="color: var(--color-text-muted); font-weight: normal;">${log.module}</span>
+        </div>
+        <div style="font-size: 0.775rem; color: var(--color-text-muted); margin-top: 4px;">
+          ${log.recordName} (${log.field})
+        </div>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--color-text-subtle); white-space: nowrap;">
+        ${log.formattedTime}
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderOverviewSessionsPreview() {
+  const container = document.getElementById("overview-sessions-preview-list");
+  if (!container) return;
+
+  if (liveSessions.length === 0) {
+    container.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--color-text-muted); font-size: 0.85rem;">No active sessions connected.</div>`;
+    return;
+  }
+
+  const sessions = liveSessions.slice(0, 4);
+  container.innerHTML = sessions.map((ses) => `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-border-subtle);">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="width: 32px; height: 32px; border-radius: 6px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center;">
+          <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${ses.deviceType === 'Mobile' 
+              ? '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>' 
+              : '<rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>'}
+          </svg>
+        </div>
+        <div>
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--color-text-main);">
+            ${ses.userName || 'User'} ${ses.isCurrent ? '<span class="current-session-indicator">You</span>' : ''}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted);">${ses.schoolName || 'School'}</div>
+        </div>
+      </div>
+      <span class="badge ${ses.status === 'Active' ? 'badge-active' : 'badge-idle'}">${ses.status || 'Active'}</span>
+    </div>
+  `).join("");
+}
+
+/**
+ * 2. Schools & Users Table Rendering
+ */
+function renderSchoolsTable(schools = liveSchools) {
   const tbody = document.getElementById("schools-table-body");
   const mobileContainer = document.getElementById("schools-mobile-cards");
 
   if (!tbody || !mobileContainer) return;
 
   if (schools.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div><h3>No schools match your search</h3><p>Try adjusting your search filters or add a new school.</p></div></td></tr>`;
-    mobileContainer.innerHTML = `<div class="empty-state"><p>No schools found.</p></div>`;
+    const emptyHtml = `
+      <div class="empty-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
+        </div>
+        <h3>No schools added yet</h3>
+        <p>Start by registering your first school institution into the centralized system.</p>
+        <button class="btn btn-primary btn-sm" onclick="document.querySelector('[data-tab=\\'tab-create-school\\']').click()">+ Add School</button>
+      </div>
+    `;
+    tbody.innerHTML = `<tr><td colspan="6">${emptyHtml}</td></tr>`;
+    mobileContainer.innerHTML = emptyHtml;
     return;
   }
 
-  // Desktop table rows
-  tbody.innerHTML = schools.map((s) => `
-    <tr>
-      <td>
-        <div class="cell-school-info">
-          <div class="school-logo-badge">${s.logo}</div>
-          <div>
-            <div class="cell-school-name">${s.name}</div>
-            <div class="cell-school-id">${s.id} &bull; Code: ${s.shortCode}</div>
+  tbody.innerHTML = schools.map((s) => {
+    const logoBadge = s.logoUrl 
+      ? `<img src="${s.logoUrl}" alt="${s.name}" style="width: 34px; height: 34px; border-radius: 6px; object-fit: cover;">` 
+      : `<div class="school-logo-badge">${s.logoInitial || s.name.substring(0, 2).toUpperCase()}</div>`;
+
+    return `
+      <tr>
+        <td>
+          <div class="cell-school-info">
+            ${logoBadge}
+            <div>
+              <div class="cell-school-name">${s.name}</div>
+              <div class="cell-school-id">${s.id} &bull; Code: ${s.shortCode || 'SCH'}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span>
+        </td>
+        <td><strong>${s.usersCount || 0}</strong> Users</td>
+        <td><span style="font-size: 0.85rem; color: #334155;">${s.adminEmail || 'No email'}</span></td>
+        <td><span style="font-size: 0.8rem; color: #64748b;">${s.createdDate}</span></td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-secondary btn-sm" onclick="window.viewSchoolDetails('${s.id}')">View Details</button>
+            <button class="btn btn-secondary btn-sm" onclick="window.toggleSchoolStatus('${s.id}', '${s.status}', '${s.name.replace(/'/g, "\\'")}')">
+              ${s.status === 'Active' ? 'Deactivate' : 'Activate'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  mobileContainer.innerHTML = schools.map((s) => {
+    const logoBadge = s.logoUrl 
+      ? `<img src="${s.logoUrl}" alt="${s.name}" style="width: 34px; height: 34px; border-radius: 6px; object-fit: cover;">` 
+      : `<div class="school-logo-badge">${s.logoInitial || s.name.substring(0, 2).toUpperCase()}</div>`;
+
+    return `
+      <div class="mobile-data-card">
+        <div class="mobile-card-header">
+          <div class="cell-school-info">
+            ${logoBadge}
+            <div>
+              <div class="cell-school-name">${s.name}</div>
+              <div class="cell-school-id">${s.id}</div>
+            </div>
+          </div>
+          <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span>
+        </div>
+        <div class="mobile-card-details">
+          <div class="mobile-detail-item">
+            <span class="mobile-detail-label">Admin Contact</span>
+            <span class="mobile-detail-val" style="word-break: break-all; font-size: 0.8rem;">${s.adminEmail}</span>
+          </div>
+          <div class="mobile-detail-item">
+            <span class="mobile-detail-label">Users Enrolled</span>
+            <span class="mobile-detail-val">${s.usersCount || 0} Accounts</span>
           </div>
         </div>
-      </td>
-      <td>
-        <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span>
-      </td>
-      <td><strong>${s.usersCount}</strong> Users</td>
-      <td><span style="font-size: 0.85rem; color: #334155;">${s.assignedAdmin}</span></td>
-      <td><span style="font-size: 0.8rem; color: #64748b;">${s.createdDate}</span></td>
-      <td>
-        <div class="row-actions">
-          <button class="btn btn-secondary btn-sm" onclick="window.viewSchoolDetails('${s.id}')">View</button>
-          <button class="btn btn-secondary btn-sm" onclick="window.toggleSchoolStatus('${s.id}')">
+        <div class="mobile-card-actions">
+          <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="window.viewSchoolDetails('${s.id}')">View Details</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.toggleSchoolStatus('${s.id}', '${s.status}', '${s.name.replace(/'/g, "\\'")}')">
             ${s.status === 'Active' ? 'Deactivate' : 'Activate'}
           </button>
         </div>
-      </td>
-    </tr>
-  `).join("");
-
-  // Mobile cards
-  mobileContainer.innerHTML = schools.map((s) => `
-    <div class="mobile-data-card">
-      <div class="mobile-card-header">
-        <div class="cell-school-info">
-          <div class="school-logo-badge">${s.logo}</div>
-          <div>
-            <div class="cell-school-name">${s.name}</div>
-            <div class="cell-school-id">${s.id}</div>
-          </div>
-        </div>
-        <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${s.status}</span>
       </div>
-      <div class="mobile-card-details">
-        <div class="mobile-detail-item">
-          <span class="mobile-detail-label">Assigned Admin</span>
-          <span class="mobile-detail-val" style="word-break: break-all; font-size: 0.8rem;">${s.assignedAdmin}</span>
-        </div>
-        <div class="mobile-detail-item">
-          <span class="mobile-detail-label">Total Users</span>
-          <span class="mobile-detail-val">${s.usersCount} Accounts</span>
-        </div>
-      </div>
-      <div class="mobile-card-actions">
-        <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="window.viewSchoolDetails('${s.id}')">View Details</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.toggleSchoolStatus('${s.id}')">
-          ${s.status === 'Active' ? 'Deactivate' : 'Activate'}
-        </button>
-      </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
-function renderUsersTable(users = superAdminState.users) {
+function renderUsersTable(users = liveUsers) {
   const tbody = document.getElementById("users-table-body");
   const mobileContainer = document.getElementById("users-mobile-cards");
 
   if (!tbody || !mobileContainer) return;
 
   if (users.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h3>No users found</h3></div></td></tr>`;
-    mobileContainer.innerHTML = `<div class="empty-state"><p>No users found.</p></div>`;
+    const emptyHtml = `
+      <div class="empty-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+        </div>
+        <h3>No users created yet</h3>
+        <p>Add staff, teachers, or administrator accounts under any registered school.</p>
+        <button class="btn btn-primary btn-sm" onclick="document.querySelector('[data-tab=\\'tab-create-user\\']').click()">+ Create User</button>
+      </div>
+    `;
+    tbody.innerHTML = `<tr><td colspan="6">${emptyHtml}</td></tr>`;
+    mobileContainer.innerHTML = emptyHtml;
     return;
   }
 
@@ -553,17 +743,18 @@ function renderUsersTable(users = superAdminState.users) {
       <td>
         <div>
           <div style="font-weight: 600; color: var(--color-text-main);">${u.name}</div>
-          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${u.id}</div>
+          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${u.userId || u.id}</div>
         </div>
       </td>
       <td><span style="font-size: 0.85rem; color: #1e293b;">${u.email}</span></td>
       <td><span style="font-size: 0.85rem;">${u.schoolName}</span></td>
-      <td><span class="badge badge-role">${u.role}</span></td>
+      <td><span class="badge badge-role">${u.role || 'Teacher'}</span></td>
       <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status}</span></td>
       <td>
         <div class="row-actions">
+          <button class="btn btn-secondary btn-sm" onclick="window.editUserPermissionsModal('${u.id}')">Permissions (${u.deviceLimit || 3} Dev)</button>
           <button class="btn btn-secondary btn-sm" onclick="window.triggerPasswordReset('${u.email}')">Reset Pwd</button>
-          <button class="btn btn-secondary btn-sm" onclick="window.toggleUserStatus('${u.id}')">
+          <button class="btn btn-secondary btn-sm" onclick="window.toggleUserStatus('${u.id}', '${u.status}', '${u.name.replace(/'/g, "\\'")}', '${u.schoolName.replace(/'/g, "\\'")}')">
             ${u.status === 'Active' ? 'Deactivate' : 'Activate'}
           </button>
         </div>
@@ -586,13 +777,14 @@ function renderUsersTable(users = superAdminState.users) {
           <span class="mobile-detail-val">${u.schoolName}</span>
         </div>
         <div class="mobile-detail-item">
-          <span class="mobile-detail-label">Role</span>
-          <span class="mobile-detail-val"><span class="badge badge-role">${u.role}</span></span>
+          <span class="mobile-detail-label">Role / Device Limit</span>
+          <span class="mobile-detail-val"><span class="badge badge-role">${u.role}</span> (${u.deviceLimit || 3} Dev)</span>
         </div>
       </div>
       <div class="mobile-card-actions">
-        <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="window.triggerPasswordReset('${u.email}')">Reset Password</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.toggleUserStatus('${u.id}')">
+        <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="window.editUserPermissionsModal('${u.id}')">Permissions</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.triggerPasswordReset('${u.email}')">Reset Pwd</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.toggleUserStatus('${u.id}', '${u.status}', '${u.name.replace(/'/g, "\\'")}', '${u.schoolName.replace(/'/g, "\\'")}')">
           ${u.status === 'Active' ? 'Deactivate' : 'Activate'}
         </button>
       </div>
@@ -600,21 +792,47 @@ function renderUsersTable(users = superAdminState.users) {
   `).join("");
 }
 
-// Window actions for dynamic click handlers
+function populateSchoolSelectDropdowns() {
+  const select = document.getElementById("new-user-school");
+  const permSchoolSelect = document.getElementById("permissions-school-select");
+
+  const optionsHtml = liveSchools.map((s) => `
+    <option value="${s.id}">${s.name} (${s.id})</option>
+  `).join("");
+
+  if (select) {
+    select.innerHTML = optionsHtml || `<option value="">No schools available (create a school first)</option>`;
+  }
+  if (permSchoolSelect) {
+    permSchoolSelect.innerHTML = optionsHtml || `<option value="">No schools available</option>`;
+  }
+}
+
+/**
+ * School Details Modal View
+ */
 window.viewSchoolDetails = (schoolId) => {
-  const school = superAdminState.schools.find((s) => s.id === schoolId);
+  const school = liveSchools.find((s) => s.id === schoolId);
   if (!school) return;
+
+  selectedSchoolForDetails = school;
+  const schoolUsers = liveUsers.filter((u) => u.schoolId === school.id);
+
+  const logoBadge = school.logoUrl 
+    ? `<img src="${school.logoUrl}" alt="${school.name}" style="width: 52px; height: 52px; border-radius: 8px; object-fit: cover;">` 
+    : `<div class="school-logo-badge" style="width: 52px; height: 52px; font-size: 1.2rem;">${school.logoInitial || school.name.substring(0, 2).toUpperCase()}</div>`;
 
   const content = document.getElementById("modal-school-detail-content");
   if (content) {
     content.innerHTML = `
       <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border);">
-        <div class="school-logo-badge" style="width: 52px; height: 52px; font-size: 1.2rem;">${school.logo}</div>
+        ${logoBadge}
         <div>
           <h3 style="font-size: 1.2rem; font-weight: 700; color: var(--color-text-main);">${school.name}</h3>
-          <div style="font-size: 0.85rem; color: var(--color-text-muted);">ID: ${school.id} &bull; Code: ${school.shortCode}</div>
+          <div style="font-size: 0.85rem; color: var(--color-text-muted);">ID: ${school.id} &bull; Short Code: ${school.shortCode}</div>
         </div>
       </div>
+
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; font-size: 0.875rem; margin-bottom: 20px;">
         <div>
           <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Status</div>
@@ -622,317 +840,231 @@ window.viewSchoolDetails = (schoolId) => {
         </div>
         <div>
           <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Total Users</div>
-          <div style="font-weight: 600; margin-top: 4px;">${school.usersCount} Active Accounts</div>
+          <div style="font-weight: 600; margin-top: 4px;">${schoolUsers.length} Active Accounts</div>
         </div>
         <div>
-          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Assigned Administrator</div>
-          <div style="font-weight: 600; margin-top: 4px;">${school.assignedAdmin}</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Administrator Email</div>
+          <div style="font-weight: 600; margin-top: 4px;">${school.adminEmail}</div>
         </div>
         <div>
-          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Created On</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Registration Date</div>
           <div style="font-weight: 600; margin-top: 4px;">${school.createdDate}</div>
         </div>
         <div style="grid-column: 1 / -1;">
-          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Campus Address</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted); text-transform: uppercase;">Campus Location</div>
           <div style="font-weight: 500; margin-top: 4px;">${school.address}</div>
         </div>
       </div>
-      <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--color-border); font-size: 0.8rem; color: #64748b;">
-        ⚡ <strong>Quick Note:</strong> Changes to permissions and device limits can be configured in the <em>Permissions</em> section.
+
+      <!-- Users in this school list -->
+      <div style="margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <h4 style="font-size: 0.95rem; font-weight: 700;">Enrolled School Users (${schoolUsers.length})</h4>
+          <button class="btn btn-secondary btn-sm" onclick="window.quickAddUserToSchool('${school.id}', '${school.name.replace(/'/g, "\\'")}')">+ Add User</button>
+        </div>
+        ${schoolUsers.length === 0 ? `
+          <div style="padding: 16px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px; text-align: center; color: var(--color-text-muted); font-size: 0.85rem;">
+            No users added to this school yet.
+          </div>
+        ` : `
+          <div style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+            ${schoolUsers.map(u => `
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+                <div>
+                  <div style="font-weight: 600; font-size: 0.875rem;">${u.name} <span class="badge badge-role" style="font-size: 0.7rem; margin-left: 4px;">${u.role}</span></div>
+                  <div style="font-size: 0.775rem; color: var(--color-text-muted);">${u.email}</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="window.editUserPermissionsModal('${u.id}')">Permissions</button>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+
+      <!-- Danger Zone -->
+      <div style="padding: 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px;">
+        <h4 style="font-size: 0.9rem; font-weight: 700; color: #9f1239; margin-bottom: 4px;">Danger Zone</h4>
+        <p style="font-size: 0.8rem; color: #881337; margin-bottom: 12px;">Permanently remove this institution from Cloud Firestore. This operation cannot be undone.</p>
+        <button class="btn btn-danger-outline btn-sm" onclick="window.openDangerDeleteSchoolModal('${school.id}', '${school.name.replace(/'/g, "\\'")}')">
+          Permanently Delete School
+        </button>
       </div>
     `;
   }
   openModal("modal-school-detail");
 };
 
-window.toggleSchoolStatus = (schoolId) => {
-  const school = superAdminState.schools.find((s) => s.id === schoolId);
-  if (!school) return;
+window.quickAddUserToSchool = (schoolId, schoolName) => {
+  closeModal("modal-school-detail");
+  const navLink = document.querySelector('[data-nav-view="schools-users"]');
+  if (navLink) navLink.click();
+  const tabBtn = document.querySelector('[data-tab="tab-create-user"]');
+  if (tabBtn) tabBtn.click();
+  const select = document.getElementById("new-user-school");
+  if (select) select.value = schoolId;
+};
 
-  const oldStatus = school.status;
-  school.status = oldStatus === "Active" ? "Inactive" : "Active";
-
-  if (school.status === "Active") {
-    superAdminState.metrics.activeSchools += 1;
-    superAdminState.metrics.inactiveSchools -= 1;
-  } else {
-    superAdminState.metrics.activeSchools -= 1;
-    superAdminState.metrics.inactiveSchools += 1;
+window.toggleSchoolStatus = async (schoolId, currentStatus, schoolName) => {
+  try {
+    const newStatus = await toggleSchoolStatus(schoolId, currentStatus, schoolName);
+    showToast(`School "${schoolName}" is now ${newStatus}.`, "info");
+  } catch (err) {
+    showToast("Failed to update school status.", "error");
   }
-
-  // Log activity
-  superAdminState.activityLogs.unshift({
-    id: `LOG-${Math.floor(5000 + Math.random() * 5000)}`,
-    user: "Super Admin",
-    userEmail: "admin@schoolportal.com",
-    school: school.name,
-    action: "Edit",
-    module: "Schools",
-    recordName: school.name,
-    field: "Status",
-    oldValue: oldStatus,
-    newValue: school.status,
-    timestamp: "Just now"
-  });
-
-  renderSchoolsTable();
-  updateMetricsUI();
-  showToast(`School status changed to "${school.status}".`, "info");
 };
 
-window.toggleUserStatus = (userId) => {
-  const user = superAdminState.users.find((u) => u.id === userId);
-  if (!user) return;
-  user.status = user.status === "Active" ? "Inactive" : "Active";
-  renderUsersTable();
-  showToast(`User ${user.name} is now ${user.status}.`, "info");
+window.toggleUserStatus = async (userId, currentStatus, userName, schoolName) => {
+  try {
+    const newStatus = await toggleUserStatus(userId, currentStatus, userName, schoolName);
+    showToast(`User ${userName} is now ${newStatus}.`, "info");
+  } catch (err) {
+    showToast("Failed to update user status.", "error");
+  }
 };
 
-window.triggerPasswordReset = (email) => {
-  const resetEmailDisplay = document.getElementById("reset-user-email-display");
-  if (resetEmailDisplay) resetEmailDisplay.textContent = email;
-  openModal("modal-password-reset");
+window.triggerPasswordReset = async (email) => {
+  try {
+    await sendUserPasswordReset(email);
+    showToast(`Password reset link sent to ${email}.`, "success");
+  } catch (err) {
+    console.error("Password reset error:", err);
+    showToast("Could not send password reset email.", "error");
+  }
+};
+
+window.openDangerDeleteSchoolModal = (schoolId, schoolName) => {
+  schoolToDeletePermanently = { id: schoolId, name: schoolName };
+  const nameEl = document.getElementById("danger-delete-school-name");
+  const idEl = document.getElementById("danger-delete-school-id");
+  const input = document.getElementById("delete-school-confirm-input");
+  const btn = document.getElementById("confirm-permanent-delete-school-btn");
+
+  if (nameEl) nameEl.textContent = schoolName;
+  if (idEl) idEl.textContent = schoolId;
+  if (input) input.value = "";
+  if (btn) btn.disabled = true;
+
+  openModal("modal-danger-delete-school");
 };
 
 /**
- * 3. Permissions Management Section
+ * User Individual Permissions Modal
  */
-function setupPermissions() {
-  populatePermissionsSchoolPicker();
-  renderPermissionsMatrix();
+window.editUserPermissionsModal = (userId) => {
+  const user = liveUsers.find((u) => u.id === userId);
+  if (!user) return;
 
-  const schoolSelect = document.getElementById("permissions-school-select");
-  if (schoolSelect) {
-    schoolSelect.addEventListener("change", () => {
-      activePermissionSchool = schoolSelect.value;
-      renderPermissionsMatrix();
-    });
-  }
+  selectedUserForPermissions = user;
+  const userTitle = document.getElementById("modal-user-perm-title");
+  const userSub = document.getElementById("modal-user-perm-sub");
 
-  // Save Permissions Bar
-  const saveBtn = document.getElementById("save-permissions-btn");
-  if (saveBtn) {
-    saveBtn.addEventListener("click", () => {
-      showToast("Permissions updated and policy saved successfully.", "success");
-    });
-  }
-}
+  if (userTitle) userTitle.textContent = `Permissions: ${user.name}`;
+  if (userSub) userSub.textContent = `${user.email} &bull; ${user.role} (${user.schoolName})`;
 
-function populatePermissionsSchoolPicker() {
-  const select = document.getElementById("permissions-school-select");
-  const createSchoolUserSelect = document.getElementById("new-user-school");
-
-  if (select) {
-    select.innerHTML = superAdminState.schools.map((s) => `
-      <option value="${s.id}" ${s.id === activePermissionSchool ? 'selected' : ''}>${s.name} (${s.id})</option>
-    `).join("");
-  }
-
-  if (createSchoolUserSelect) {
-    createSchoolUserSelect.innerHTML = superAdminState.schools.map((s) => `
-      <option value="${s.id}">${s.name} (${s.id})</option>
-    `).join("");
-  }
-}
-
-function renderPermissionsMatrix() {
-  const container = document.getElementById("permissions-matrix-grid");
-  if (!container) return;
-
-  const currentPerms = superAdminState.permissions[activePermissionSchool] || {
-    schoolName: "School",
+  const perms = user.permissions || {
     editable: true,
     addStudent: true,
     deleteStudent: false,
     excelExport: true,
-    reports: true,
-    deviceLimit: 5
+    reports: false
   };
 
-  container.innerHTML = `
-    <!-- 1. Master Editable -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #2563eb;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-          </svg>
-          Record Editing (Editable)
-        </h4>
-        <p>Master permission to allow school staff to edit student and class records.</p>
-      </div>
-      <div class="switch-wrapper">
-        <span class="switch-label-state" id="label-perm-editable">${currentPerms.editable ? 'Enabled' : 'Disabled'}</span>
-        <label class="switch">
-          <input type="checkbox" id="perm-editable" ${currentPerms.editable ? 'checked' : ''} onchange="window.updatePermissionToggle('editable')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
+  const setCheckbox = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
 
-    <!-- 2. Add Student -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #059669;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line>
-          </svg>
-          Add Student
-        </h4>
-        <p>Allows enrollment of new student admissions into class rosters.</p>
-      </div>
-      <div class="switch-wrapper">
-        <span class="switch-label-state" id="label-perm-addStudent">${currentPerms.addStudent ? 'Enabled' : 'Disabled'}</span>
-        <label class="switch">
-          <input type="checkbox" id="perm-addStudent" ${currentPerms.addStudent ? 'checked' : ''} onchange="window.updatePermissionToggle('addStudent')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
+  setCheckbox("modal-perm-editable", perms.editable);
+  setCheckbox("modal-perm-addStudent", perms.addStudent);
+  setCheckbox("modal-perm-deleteStudent", perms.deleteStudent);
+  setCheckbox("modal-perm-excelExport", perms.excelExport);
+  setCheckbox("modal-perm-reports", perms.reports);
 
-    <!-- 3. Delete Student -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #dc2626;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-          Delete Student Records
-        </h4>
-        <p>High-risk permission. Allows removing student records permanently.</p>
-      </div>
-      <div class="switch-wrapper">
-        <span class="switch-label-state" id="label-perm-deleteStudent">${currentPerms.deleteStudent ? 'Enabled' : 'Disabled'}</span>
-        <label class="switch">
-          <input type="checkbox" id="perm-deleteStudent" ${currentPerms.deleteStudent ? 'checked' : ''} onchange="window.updatePermissionToggle('deleteStudent')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
+  const limitVal = document.getElementById("modal-device-limit-val");
+  if (limitVal) limitVal.textContent = user.deviceLimit || 3;
 
-    <!-- 4. Excel Export -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #047857;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line>
-          </svg>
-          Excel / CSV Export
-        </h4>
-        <p>Enables bulk downloading and spreadsheet export of student and fee data.</p>
-      </div>
-      <div class="switch-wrapper">
-        <span class="switch-label-state" id="label-perm-excelExport">${currentPerms.excelExport ? 'Enabled' : 'Disabled'}</span>
-        <label class="switch">
-          <input type="checkbox" id="perm-excelExport" ${currentPerms.excelExport ? 'checked' : ''} onchange="window.updatePermissionToggle('excelExport')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <!-- 5. Reports -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #7c3aed;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>
-          </svg>
-          Analytics & Reports
-        </h4>
-        <p>Grants access to comprehensive school performance and attendance reports.</p>
-      </div>
-      <div class="switch-wrapper">
-        <span class="switch-label-state" id="label-perm-reports">${currentPerms.reports ? 'Enabled' : 'Disabled'}</span>
-        <label class="switch">
-          <input type="checkbox" id="perm-reports" ${currentPerms.reports ? 'checked' : ''} onchange="window.updatePermissionToggle('reports')">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <!-- 6. Device Limit Control -->
-    <div class="permission-box">
-      <div class="permission-info">
-        <h4>
-          <svg style="width: 18px; height: 18px; color: #d97706;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line>
-          </svg>
-          Simultaneous Device Limit
-        </h4>
-        <p>Limits how many active sessions this school can run concurrently (1 to 15).</p>
-      </div>
-      <div class="switch-wrapper">
-        <div class="stepper-control">
-          <button type="button" class="stepper-btn" onclick="window.stepDeviceLimit(-1)">-</button>
-          <span class="stepper-value" id="device-limit-val">${currentPerms.deviceLimit}</span>
-          <button type="button" class="stepper-btn" onclick="window.stepDeviceLimit(1)">+</button>
-        </div>
-        <span style="font-size: 0.775rem; color: var(--color-text-muted);">Max Devices</span>
-      </div>
-    </div>
-  `;
-}
-
-window.updatePermissionToggle = (key) => {
-  const current = superAdminState.permissions[activePermissionSchool];
-  if (!current) return;
-  const checkbox = document.getElementById(`perm-${key}`);
-  const label = document.getElementById(`label-perm-${key}`);
-  if (checkbox && label) {
-    current[key] = checkbox.checked;
-    label.textContent = checkbox.checked ? 'Enabled' : 'Disabled';
-  }
+  openModal("modal-user-permissions");
 };
 
-window.stepDeviceLimit = (delta) => {
-  const current = superAdminState.permissions[activePermissionSchool];
-  if (!current) return;
-  const next = Math.max(1, Math.min(15, current.deviceLimit + delta));
-  current.deviceLimit = next;
-  const el = document.getElementById("device-limit-val");
-  if (el) el.textContent = next;
+window.stepModalDeviceLimit = (delta) => {
+  const el = document.getElementById("modal-device-limit-val");
+  if (!el) return;
+  let current = Number(el.textContent) || 3;
+  let next = Math.max(1, Math.min(15, current + delta));
+  el.textContent = next;
 };
 
 /**
- * 4. Active Sessions Section
+ * 3. Permissions View (School/User Policy Browser)
  */
-function setupActiveSessions() {
-  renderActiveSessions();
+function renderPermissionsMatrix() {
+  const container = document.getElementById("permissions-matrix-grid");
+  if (!container) return;
 
-  const searchInput = document.getElementById("search-sessions-input");
-  const deviceFilter = document.getElementById("filter-sessions-device");
-  const statusFilter = document.getElementById("filter-sessions-status");
+  if (liveUsers.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column: 1 / -1; padding: 32px; text-align: center; color: var(--color-text-muted);">
+        <p>No user accounts found in Firestore. Create a user to configure permissions.</p>
+      </div>
+    `;
+    return;
+  }
 
-  if (searchInput && deviceFilter && statusFilter) {
-    const handleFilter = () => {
-      const q = searchInput.value.toLowerCase().trim();
-      const dev = deviceFilter.value;
-      const st = statusFilter.value;
-
-      const filtered = superAdminState.sessions.filter((s) => {
-        const matchesQ = s.userName.toLowerCase().includes(q) || s.userEmail.toLowerCase().includes(q) || s.schoolName.toLowerCase().includes(q) || s.os.toLowerCase().includes(q);
-        const matchesDev = dev === "ALL" || s.deviceType === dev;
-        const matchesSt = st === "ALL" || s.status === st;
-        return matchesQ && matchesDev && matchesSt;
-      });
-      renderActiveSessions(filtered);
+  container.innerHTML = liveUsers.map((u) => {
+    const perms = u.permissions || {
+      editable: true,
+      addStudent: true,
+      deleteStudent: false,
+      excelExport: true,
+      reports: false
     };
 
-    searchInput.addEventListener("input", handleFilter);
-    deviceFilter.addEventListener("change", handleFilter);
-    statusFilter.addEventListener("change", handleFilter);
-  }
+    return `
+      <div class="permission-box">
+        <div class="permission-info">
+          <h4>
+            <span class="badge badge-role" style="font-size: 0.725rem;">${u.role}</span>
+            ${u.name}
+          </h4>
+          <p style="margin-top: 2px;">${u.email} &bull; <strong>${u.schoolName}</strong></p>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+            <span class="badge ${perms.editable ? 'badge-active' : 'badge-inactive'}">Editable: ${perms.editable ? 'ON' : 'OFF'}</span>
+            <span class="badge ${perms.addStudent ? 'badge-active' : 'badge-inactive'}">Add Student: ${perms.addStudent ? 'ON' : 'OFF'}</span>
+            <span class="badge ${perms.deleteStudent ? 'badge-active' : 'badge-inactive'}">Delete Student: ${perms.deleteStudent ? 'ON' : 'OFF'}</span>
+            <span class="badge ${perms.excelExport ? 'badge-active' : 'badge-inactive'}">Excel: ${perms.excelExport ? 'ON' : 'OFF'}</span>
+            <span class="badge ${perms.reports ? 'badge-active' : 'badge-inactive'}">Reports: ${perms.reports ? 'ON' : 'OFF'}</span>
+          </div>
+        </div>
+        <div class="switch-wrapper" style="padding-top: 12px;">
+          <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Device Limit: ${u.deviceLimit || 3}</span>
+          <button class="btn btn-secondary btn-sm" onclick="window.editUserPermissionsModal('${u.id}')">Edit Permissions</button>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
-function renderActiveSessions(sessions = superAdminState.sessions) {
+/**
+ * 4. Active Sessions View
+ */
+function renderActiveSessions(sessions = liveSessions) {
   const tbody = document.getElementById("sessions-table-body");
   const mobileContainer = document.getElementById("sessions-mobile-cards");
 
   if (!tbody || !mobileContainer) return;
 
   if (sessions.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><h3>No active sessions found</h3></div></td></tr>`;
-    mobileContainer.innerHTML = `<div class="empty-state"><p>No sessions match criteria.</p></div>`;
+    const emptyHtml = `
+      <div class="empty-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
+        </div>
+        <h3>No active sessions</h3>
+        <p>Live connected devices and authenticated staff sessions will appear here in real time.</p>
+      </div>
+    `;
+    tbody.innerHTML = `<tr><td colspan="7">${emptyHtml}</td></tr>`;
+    mobileContainer.innerHTML = emptyHtml;
     return;
   }
 
@@ -940,37 +1072,31 @@ function renderActiveSessions(sessions = superAdminState.sessions) {
     <tr>
       <td>
         <div>
-          <div style="font-weight: 600; color: var(--color-text-main);">
-            ${s.userName} ${s.isCurrent ? '<span class="current-session-indicator">Current</span>' : ''}
-          </div>
-          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${s.userEmail}</div>
+          <div style="font-weight: 600; color: var(--color-text-main);">${s.userName || 'User'}</div>
+          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${s.userEmail || ''}</div>
         </div>
       </td>
-      <td><span style="font-size: 0.85rem;">${s.schoolName}</span></td>
+      <td><span style="font-size: 0.85rem;">${s.schoolName || 'School'}</span></td>
       <td>
         <div class="session-device-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             ${s.deviceType === 'Mobile' 
               ? '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>' 
-              : (s.deviceType === 'Tablet' 
-                ? '<rect width="16" height="20" x="4" y="2" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line>'
-                : '<rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>')}
+              : '<rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>'}
           </svg>
-          ${s.deviceType}
+          ${s.deviceType || 'Desktop'}
         </div>
       </td>
       <td>
         <div>
-          <div style="font-size: 0.825rem; font-weight: 500;">${s.browser}</div>
-          <div style="font-size: 0.725rem; color: var(--color-text-muted);">${s.os} &bull; ${s.ipAddress}</div>
+          <div style="font-size: 0.825rem; font-weight: 500;">${s.browser || 'Browser'}</div>
+          <div style="font-size: 0.725rem; color: var(--color-text-muted);">${s.os || 'OS'}</div>
         </div>
       </td>
-      <td><span style="font-size: 0.8rem; color: #475569;">${s.loginTime}</span></td>
-      <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-idle'}">${s.status}</span></td>
+      <td><span style="font-size: 0.8rem; color: #475569;">${s.loginTime || 'Active'}</span></td>
+      <td><span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-idle'}">${s.status || 'Active'}</span></td>
       <td>
-        ${s.isCurrent 
-          ? '<span style="font-size: 0.75rem; color: #94a3b8;">Current Session</span>' 
-          : `<button class="btn btn-danger-outline btn-sm" onclick="window.requestForceLogout('${s.id}')">Force Logout</button>`}
+        <button class="btn btn-danger-outline btn-sm" onclick="window.requestForceLogout('${s.id}')">Force Logout</button>
       </td>
     </tr>
   `).join("");
@@ -979,88 +1105,60 @@ function renderActiveSessions(sessions = superAdminState.sessions) {
     <div class="mobile-data-card">
       <div class="mobile-card-header">
         <div>
-          <div style="font-weight: 700; color: var(--color-text-main);">
-            ${s.userName} ${s.isCurrent ? '<span class="current-session-indicator">Current</span>' : ''}
-          </div>
-          <div style="font-size: 0.8rem; color: var(--color-text-muted);">${s.userEmail}</div>
+          <div style="font-weight: 700; color: var(--color-text-main);">${s.userName || 'User'}</div>
+          <div style="font-size: 0.8rem; color: var(--color-text-muted);">${s.userEmail || ''}</div>
         </div>
-        <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-idle'}">${s.status}</span>
+        <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-idle'}">${s.status || 'Active'}</span>
       </div>
       <div class="mobile-card-details">
         <div class="mobile-detail-item">
           <span class="mobile-detail-label">School</span>
-          <span class="mobile-detail-val">${s.schoolName}</span>
+          <span class="mobile-detail-val">${s.schoolName || 'School'}</span>
         </div>
         <div class="mobile-detail-item">
           <span class="mobile-detail-label">Device & OS</span>
-          <span class="mobile-detail-val">${s.deviceType} &bull; ${s.os}</span>
-        </div>
-        <div class="mobile-detail-item" style="grid-column: 1 / -1;">
-          <span class="mobile-detail-label">Login Time</span>
-          <span class="mobile-detail-val">${s.loginTime} (${s.lastActivity})</span>
+          <span class="mobile-detail-val">${s.deviceType || 'Device'} &bull; ${s.os || 'OS'}</span>
         </div>
       </div>
       <div class="mobile-card-actions">
-        ${s.isCurrent 
-          ? '<span style="font-size: 0.8rem; color: #94a3b8; padding: 4px 0;">This is your active browser session</span>' 
-          : `<button class="btn btn-danger-outline btn-sm" style="width: 100%;" onclick="window.requestForceLogout('${s.id}')">Force Logout Device</button>`}
+        <button class="btn btn-danger-outline btn-sm" style="width: 100%;" onclick="window.requestForceLogout('${s.id}')">Force Logout Device</button>
       </div>
     </div>
   `).join("");
 }
 
 window.requestForceLogout = (sessionId) => {
-  const session = superAdminState.sessions.find((s) => s.id === sessionId);
+  const session = liveSessions.find((s) => s.id === sessionId);
   if (!session) return;
-
   sessionToTerminate = session;
   const displayTarget = document.getElementById("force-logout-target-display");
   if (displayTarget) {
-    displayTarget.textContent = `${session.userName} (${session.userEmail}) on ${session.deviceType} [${session.os}]`;
+    displayTarget.textContent = `${session.userName || 'User'} (${session.userEmail}) on ${session.deviceType || 'Device'}`;
   }
   openModal("modal-force-logout");
 };
 
 /**
- * 5. Activity / Edit Logs Section
+ * 5. Activity Logs View
  */
-function setupActivityLogs() {
-  renderActivityLogs();
-
-  const searchInput = document.getElementById("search-logs-input");
-  const moduleFilter = document.getElementById("filter-logs-module");
-  const actionFilter = document.getElementById("filter-logs-action");
-
-  if (searchInput && moduleFilter && actionFilter) {
-    const handleFilter = () => {
-      const q = searchInput.value.toLowerCase().trim();
-      const mod = moduleFilter.value;
-      const act = actionFilter.value;
-
-      const filtered = superAdminState.activityLogs.filter((log) => {
-        const matchesQ = log.user.toLowerCase().includes(q) || log.school.toLowerCase().includes(q) || log.recordName.toLowerCase().includes(q) || log.field.toLowerCase().includes(q);
-        const matchesMod = mod === "ALL" || log.module === mod;
-        const matchesAct = act === "ALL" || log.action === act;
-        return matchesQ && matchesMod && matchesAct;
-      });
-      renderActivityLogs(filtered);
-    };
-
-    searchInput.addEventListener("input", handleFilter);
-    moduleFilter.addEventListener("change", handleFilter);
-    actionFilter.addEventListener("change", handleFilter);
-  }
-}
-
-function renderActivityLogs(logs = superAdminState.activityLogs) {
+function renderActivityLogs(logs = liveLogs) {
   const tbody = document.getElementById("logs-table-body");
   const mobileContainer = document.getElementById("logs-mobile-cards");
 
   if (!tbody || !mobileContainer) return;
 
   if (logs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h3>No audit records found</h3></div></td></tr>`;
-    mobileContainer.innerHTML = `<div class="empty-state"><p>No activity logs match filters.</p></div>`;
+    const emptyHtml = `
+      <div class="empty-state">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+        </div>
+        <h3>No activity recorded yet</h3>
+        <p>All school updates, user modifications, and permission alterations will be recorded in this live audit trail.</p>
+      </div>
+    `;
+    tbody.innerHTML = `<tr><td colspan="6">${emptyHtml}</td></tr>`;
+    mobileContainer.innerHTML = emptyHtml;
     return;
   }
 
@@ -1068,21 +1166,21 @@ function renderActivityLogs(logs = superAdminState.activityLogs) {
     <tr>
       <td>
         <div>
-          <div style="font-weight: 600; color: var(--color-text-main);">${log.user}</div>
-          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${log.school}</div>
+          <div style="font-weight: 600; color: var(--color-text-main);">${log.user || 'Admin'}</div>
+          <div style="font-size: 0.775rem; color: var(--color-text-muted);">${log.school || 'System'}</div>
         </div>
       </td>
       <td>
-        <span class="action-badge action-badge-${log.action.toLowerCase()}">${log.action}</span>
+        <span class="action-badge action-badge-${(log.action || 'edit').toLowerCase()}">${log.action}</span>
       </td>
       <td>
         <div>
-          <div style="font-weight: 500; font-size: 0.85rem;">${log.module}</div>
-          <div style="font-size: 0.75rem; color: var(--color-text-muted);">${log.recordName}</div>
+          <div style="font-weight: 500; font-size: 0.85rem;">${log.module || 'Module'}</div>
+          <div style="font-size: 0.75rem; color: var(--color-text-muted);">${log.recordName || ''}</div>
         </div>
       </td>
       <td>
-        <div style="font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 2px;">${log.field}</div>
+        <div style="font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 2px;">${log.field || 'Field'}</div>
         <div class="diff-box">
           <span class="diff-old">${log.oldValue}</span>
           <span class="diff-arrow">&rarr;</span>
@@ -1090,7 +1188,7 @@ function renderActivityLogs(logs = superAdminState.activityLogs) {
         </div>
       </td>
       <td>
-        <span style="font-size: 0.8rem; color: #64748b; white-space: nowrap;">${log.timestamp}</span>
+        <span style="font-size: 0.8rem; color: #64748b; white-space: nowrap;">${log.formattedTime}</span>
       </td>
       <td>
         <button class="btn btn-secondary btn-sm" onclick="window.viewLogPayload('${log.id}')">Details</button>
@@ -1105,7 +1203,7 @@ function renderActivityLogs(logs = superAdminState.activityLogs) {
           <div style="font-weight: 700; color: var(--color-text-main);">${log.user}</div>
           <div style="font-size: 0.775rem; color: var(--color-text-muted);">${log.school}</div>
         </div>
-        <span class="action-badge action-badge-${log.action.toLowerCase()}">${log.action}</span>
+        <span class="action-badge action-badge-${(log.action || 'edit').toLowerCase()}">${log.action}</span>
       </div>
       <div class="mobile-card-details">
         <div class="mobile-detail-item">
@@ -1114,7 +1212,7 @@ function renderActivityLogs(logs = superAdminState.activityLogs) {
         </div>
         <div class="mobile-detail-item">
           <span class="mobile-detail-label">Timestamp</span>
-          <span class="mobile-detail-val" style="font-size: 0.75rem;">${log.timestamp}</span>
+          <span class="mobile-detail-val" style="font-size: 0.75rem;">${log.formattedTime}</span>
         </div>
         <div class="mobile-detail-item" style="grid-column: 1 / -1;">
           <span class="mobile-detail-label">Field: ${log.field}</span>
@@ -1133,9 +1231,8 @@ function renderActivityLogs(logs = superAdminState.activityLogs) {
 }
 
 window.viewLogPayload = (logId) => {
-  const log = superAdminState.activityLogs.find((l) => l.id === logId);
+  const log = liveLogs.find((l) => l.id === logId);
   if (!log) return;
-
   const content = document.getElementById("modal-log-payload-content");
   if (content) {
     content.innerHTML = `
@@ -1148,7 +1245,7 @@ window.viewLogPayload = (logId) => {
 };
 
 /**
- * Sidebar Collapse & Mobile Drawer
+ * Sidebar Collapse & Mobile Drawer Toggle
  */
 function setupSidebarCollapse() {
   const collapseBtn = document.getElementById("sidebar-collapse-btn");

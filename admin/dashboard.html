@@ -20,7 +20,8 @@
     "imports": {
       "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
       "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+      "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
     }
   }
   </script>
@@ -98,7 +99,7 @@
                   <path d="M14 9h1"></path><path d="M14 13h1"></path><path d="M14 17h1"></path>
                 </svg>
                 <span>Schools & Users</span>
-                <span class="nav-badge-count" id="sidebar-badge-schools">12</span>
+                <span class="nav-badge-count" id="sidebar-badge-schools">0</span>
               </a>
             </li>
             <li>
@@ -124,7 +125,7 @@
                   <line x1="2" y1="20" x2="22" y2="20"></line>
                 </svg>
                 <span>Active Sessions</span>
-                <span class="nav-badge-count" id="sidebar-badge-sessions">14</span>
+                <span class="nav-badge-count" id="sidebar-badge-sessions">0</span>
               </a>
             </li>
             <li>
@@ -208,7 +209,7 @@
           <div class="view-header">
             <div class="view-title-group">
               <h2>System-Wide Overview</h2>
-              <p>Centralized metrics and telemetry across all registered institutions.</p>
+              <p>Real-time metrics and live telemetry from Cloud Firestore.</p>
             </div>
             <div class="view-actions-group">
               <button class="btn btn-primary" data-quick-nav="schools-users" data-quick-tab="tab-create-school">
@@ -218,7 +219,7 @@
             </div>
           </div>
 
-          <!-- 5 Metrics Cards -->
+          <!-- 5 Metrics Cards (Real-time Firestore sync) -->
           <div class="overview-metrics-grid">
             <!-- 1. Total Schools -->
             <div class="metric-card">
@@ -228,7 +229,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
                 </div>
               </div>
-              <div class="metric-card-value" id="metric-total-schools">12</div>
+              <div class="metric-card-value" id="metric-total-schools">0</div>
               <div class="metric-card-footer">Registered Institutions</div>
             </div>
 
@@ -240,7 +241,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 </div>
               </div>
-              <div class="metric-card-value" id="metric-active-schools">11</div>
+              <div class="metric-card-value" id="metric-active-schools">0</div>
               <div class="metric-card-footer" style="color: #15803d;">Operational & online</div>
             </div>
 
@@ -252,8 +253,8 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                 </div>
               </div>
-              <div class="metric-card-value" id="metric-inactive-schools">1</div>
-              <div class="metric-card-footer">Pending verification</div>
+              <div class="metric-card-value" id="metric-inactive-schools">0</div>
+              <div class="metric-card-footer">Suspended / Draft</div>
             </div>
 
             <!-- 4. Total Users -->
@@ -264,8 +265,8 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                 </div>
               </div>
-              <div class="metric-card-value" id="metric-total-users">48</div>
-              <div class="metric-card-footer">Admins, Teachers, Operators</div>
+              <div class="metric-card-value" id="metric-total-users">0</div>
+              <div class="metric-card-footer">School staff & operators</div>
             </div>
 
             <!-- 5. Active Sessions -->
@@ -276,7 +277,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
                 </div>
               </div>
-              <div class="metric-card-value" id="metric-active-sessions">14</div>
+              <div class="metric-card-value" id="metric-active-sessions">0</div>
               <div class="metric-card-footer" style="color: #0369a1;">Live connected devices</div>
             </div>
           </div>
@@ -320,7 +321,7 @@
                 <button class="btn btn-secondary btn-sm" data-quick-nav="logs">View All Logs &rarr;</button>
               </div>
               <div id="overview-recent-logs-list">
-                <!-- Dynamically populated -->
+                <!-- Dynamically populated from Firestore -->
               </div>
             </div>
 
@@ -331,7 +332,7 @@
                 <button class="btn btn-secondary btn-sm" data-quick-nav="sessions">Manage Sessions &rarr;</button>
               </div>
               <div id="overview-sessions-preview-list">
-                <!-- Dynamically populated -->
+                <!-- Dynamically populated from Firestore -->
               </div>
             </div>
           </div>
@@ -344,8 +345,8 @@
         <section id="view-schools-users" class="view-section">
           <div class="view-header">
             <div class="view-title-group">
-              <h2>Schools & Users Directory</h2>
-              <p>Provision institutions, configure user profiles, and manage access credentials.</p>
+              <h2>Schools & Users Management</h2>
+              <p>Provision schools, configure staff accounts, and manage institutional hierarchy.</p>
             </div>
           </div>
 
@@ -361,11 +362,11 @@
             </button>
             <button class="tab-btn" data-tab="tab-create-school">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              <span>Add New School</span>
+              <span>+ Add School</span>
             </button>
             <button class="tab-btn" data-tab="tab-create-user">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line></svg>
-              <span>Create User Account</span>
+              <span>+ Create User</span>
             </button>
           </div>
 
@@ -400,14 +401,14 @@
                   </tr>
                 </thead>
                 <tbody id="schools-table-body">
-                  <!-- Dynamically populated -->
+                  <!-- Real-time Firestore sync -->
                 </tbody>
               </table>
             </div>
 
             <!-- Mobile Card View -->
             <div id="schools-mobile-cards" class="mobile-card-list">
-              <!-- Dynamically populated -->
+              <!-- Real-time Firestore sync -->
             </div>
           </div>
 
@@ -421,9 +422,11 @@
               <div class="filter-group">
                 <select id="filter-users-role" class="select-control">
                   <option value="ALL">All Roles</option>
-                  <option value="Super Admin">Super Admin</option>
-                  <option value="School Admin">School Admin</option>
-                  <option value="Teacher / Operator">Teacher / Operator</option>
+                  <option value="Principal">Principal</option>
+                  <option value="Teacher">Teacher</option>
+                  <option value="Accountant">Accountant</option>
+                  <option value="Operator">Operator</option>
+                  <option value="Custom">Custom</option>
                 </select>
                 <button class="btn btn-primary" onclick="document.querySelector('[data-tab=\'tab-create-user\']').click()">+ Create User</button>
               </div>
@@ -433,22 +436,22 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>User ID & Name</th>
+                    <th>User & ID</th>
                     <th>Email Address</th>
                     <th>Assigned School</th>
-                    <th>Role</th>
+                    <th>Role / Title</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="users-table-body">
-                  <!-- Dynamically populated -->
+                  <!-- Real-time Firestore sync -->
                 </tbody>
               </table>
             </div>
 
             <div id="users-mobile-cards" class="mobile-card-list">
-              <!-- Dynamically populated -->
+              <!-- Real-time Firestore sync -->
             </div>
           </div>
 
@@ -456,41 +459,48 @@
           <div id="tab-create-school" class="tab-panel">
             <div class="form-card">
               <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">Register New School</h3>
-              <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 20px;">Provision a new school workspace in the multi-tenant architecture.</p>
+              <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 20px;">Provision a new school institution in Cloud Firestore.</p>
 
               <form id="form-create-school">
                 <div class="form-grid-2">
                   <div class="form-group">
                     <label class="form-label" for="new-school-name">School Official Name *</label>
-                    <input type="text" id="new-school-name" class="form-input-text" placeholder="e.g. Springfield Public High School" required>
+                    <input type="text" id="new-school-name" class="form-input-text" placeholder="e.g. Springfield High School" required>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="new-school-id">Unique School ID (Optional)</label>
-                    <input type="text" id="new-school-id" class="form-input-text" placeholder="Auto-generated if left blank (e.g. SCH-1008)">
+                    <input type="text" id="new-school-id" class="form-input-text" placeholder="Auto-generated if blank (e.g. SCH-1001)">
                   </div>
                 </div>
 
                 <div class="form-grid-2">
                   <div class="form-group">
-                    <label class="form-label" for="new-school-admin">Assigned Administrator Email *</label>
+                    <label class="form-label" for="new-school-admin">Administrator Email *</label>
                     <input type="email" id="new-school-admin" class="form-input-text" placeholder="principal@springfield.edu" required>
-                    <span class="form-helper-text">Primary account contact for this school.</span>
+                    <span class="form-helper-text">Primary contact email for this school.</span>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="new-school-status">Initial Status</label>
                     <select id="new-school-status" class="form-select">
-                      <option value="Active">Active (Immediate Provisioning)</option>
-                      <option value="Inactive">Inactive (Suspended / Draft)</option>
+                      <option value="Active">Active (Operational)</option>
+                      <option value="Inactive">Inactive (Suspended)</option>
                     </select>
                   </div>
                 </div>
 
-                <div class="form-group" style="margin-bottom: 24px;">
-                  <label class="form-label" for="new-school-address">Campus Address / Location Details</label>
-                  <textarea id="new-school-address" class="form-textarea" placeholder="Street address, City, State, ZIP code"></textarea>
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="form-label" for="new-school-logo">School Logo (Upload to Firebase Storage)</label>
+                    <input type="file" id="new-school-logo" class="form-input-text" accept="image/*" style="padding: 7px 12px;">
+                    <span class="form-helper-text">PNG, JPG, or SVG image.</span>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="new-school-address">Campus Address</label>
+                    <input type="text" id="new-school-address" class="form-input-text" placeholder="Street address, City, ZIP">
+                  </div>
                 </div>
 
-                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
                   <button type="button" class="btn btn-secondary" onclick="document.querySelector('[data-tab=\'tab-schools-list\']').click()">Cancel</button>
                   <button type="submit" class="btn btn-primary">Create & Provision School</button>
                 </div>
@@ -502,38 +512,40 @@
           <div id="tab-create-user" class="tab-panel">
             <div class="form-card">
               <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 6px;">Create User Account</h3>
-              <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 20px;">Add a staff member or administrator account and assign to a school.</p>
+              <p style="font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 20px;">Provision a staff member under a school with custom permissions.</p>
 
               <form id="form-create-user">
                 <div class="form-grid-2">
                   <div class="form-group">
                     <label class="form-label" for="new-user-name">Full Name *</label>
-                    <input type="text" id="new-user-name" class="form-input-text" placeholder="e.g. Sarah Jenkins" required>
+                    <input type="text" id="new-user-name" class="form-input-text" placeholder="e.g. John Doe" required>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="new-user-email">Login Email Address *</label>
-                    <input type="email" id="new-user-email" class="form-input-text" placeholder="sarah.j@school.edu" required>
+                    <input type="email" id="new-user-email" class="form-input-text" placeholder="john@school.edu" required>
                   </div>
                 </div>
 
                 <div class="form-grid-2">
                   <div class="form-group">
                     <label class="form-label" for="new-user-school">Assigned School *</label>
-                    <select id="new-user-school" class="form-select">
-                      <!-- Populated dynamically -->
+                    <select id="new-user-school" class="form-select" required>
+                      <!-- Dynamically populated from live Firestore schools -->
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label" for="new-user-role">Role Hierarchy</label>
+                    <label class="form-label" for="new-user-role">Role / Title (Label)</label>
                     <select id="new-user-role" class="form-select">
-                      <option value="School Admin">School Admin (Full School Access)</option>
-                      <option value="Teacher / Operator">Teacher / Operator (Data Entry)</option>
-                      <option value="Super Admin">Super Admin (System-Wide)</option>
+                      <option value="Principal">Principal</option>
+                      <option value="Teacher">Teacher</option>
+                      <option value="Accountant">Accountant</option>
+                      <option value="Operator">Operator</option>
+                      <option value="Custom">Custom</option>
                     </select>
                   </div>
                 </div>
 
-                <div class="form-grid-2" style="margin-bottom: 24px;">
+                <div class="form-grid-2" style="margin-bottom: 20px;">
                   <div class="form-group">
                     <label class="form-label" for="new-user-status">Account Status</label>
                     <select id="new-user-status" class="form-select">
@@ -542,10 +554,8 @@
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Password Delivery</label>
-                    <div style="font-size: 0.85rem; color: #475569; padding-top: 10px;">
-                      ⚡ Password invitation link will be triggered on account creation.
-                    </div>
+                    <label class="form-label" for="new-user-device-limit">Concurrent Device Limit (1 to 15)</label>
+                    <input type="number" id="new-user-device-limit" class="form-input-text" min="1" max="15" value="3">
                   </div>
                 </div>
 
@@ -565,37 +575,14 @@
         <section id="view-permissions" class="view-section">
           <div class="view-header">
             <div class="view-title-group">
-              <h2>Permissions Matrix & Access Limits</h2>
-              <p>Configure operational capabilities, export privileges, and device quotas per school.</p>
+              <h2>Individual Permissions & Device Limits</h2>
+              <p>Per-user operational privileges: Editable, Add Student, Delete Student, Excel Export, Reports, and Device Limits.</p>
             </div>
           </div>
 
           <div class="permissions-container">
-            <!-- School Selector Bar -->
-            <div class="permissions-school-picker">
-              <div>
-                <label class="form-label" for="permissions-school-select">Select Target School for Policy Configuration:</label>
-                <div style="font-size: 0.775rem; color: var(--color-text-muted);">Adjusting controls below updates the live capability matrix for this institution.</div>
-              </div>
-              <div style="min-width: 260px;">
-                <select id="permissions-school-select" class="select-control" style="width: 100%; font-weight: 600;">
-                  <!-- Populated dynamically -->
-                </select>
-              </div>
-            </div>
-
-            <!-- Permission Items Matrix -->
-            <div class="permissions-grid" id="permissions-matrix-grid">
-              <!-- Dynamically populated -->
-            </div>
-
-            <!-- Save Bar -->
-            <div class="permissions-action-bar">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <svg style="width: 18px; height: 18px; color: #1d4ed8;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <span style="font-size: 0.85rem; font-weight: 600; color: #1e3a8a;">Policy changes will apply immediately to all active sessions in this school.</span>
-              </div>
-              <button class="btn btn-primary" id="save-permissions-btn">Save Permission Changes</button>
+            <div id="permissions-matrix-grid" class="permissions-grid">
+              <!-- Real-time Firestore sync -->
             </div>
           </div>
         </section>
@@ -608,7 +595,7 @@
           <div class="view-header">
             <div class="view-title-group">
               <h2>Active Sessions & Device Monitoring</h2>
-              <p>Live audit of connected user sessions, browsers, operating systems, and remote termination controls.</p>
+              <p>Live session auditing and remote device termination from Cloud Firestore.</p>
             </div>
           </div>
 
@@ -647,14 +634,14 @@
                 </tr>
               </thead>
               <tbody id="sessions-table-body">
-                <!-- Dynamically populated -->
+                <!-- Real-time Firestore sync -->
               </tbody>
             </table>
           </div>
 
           <!-- Mobile Cards -->
           <div id="sessions-mobile-cards" class="mobile-card-list">
-            <!-- Dynamically populated -->
+            <!-- Real-time Firestore sync -->
           </div>
         </section>
 
@@ -666,7 +653,7 @@
           <div class="view-header">
             <div class="view-title-group">
               <h2>Activity & Edit Logs</h2>
-              <p>Immutable audit trail of all student profile modifications, admissions, and permission alterations.</p>
+              <p>Real-time audit trail of all student admissions, record modifications, and permission alterations.</p>
             </div>
           </div>
 
@@ -678,12 +665,12 @@
             <div class="filter-group">
               <select id="filter-logs-module" class="select-control">
                 <option value="ALL">All Modules</option>
-                <option value="Students">Students</option>
-                <option value="Permissions">Permissions</option>
-                <option value="Attendance">Attendance</option>
-                <option value="Fees">Fees</option>
                 <option value="Schools">Schools</option>
                 <option value="Users">Users</option>
+                <option value="Permissions">Permissions</option>
+                <option value="Students">Students</option>
+                <option value="Attendance">Attendance</option>
+                <option value="Fees">Fees</option>
               </select>
               <select id="filter-logs-action" class="select-control">
                 <option value="ALL">All Actions</option>
@@ -708,14 +695,14 @@
                 </tr>
               </thead>
               <tbody id="logs-table-body">
-                <!-- Dynamically populated -->
+                <!-- Real-time Firestore sync -->
               </tbody>
             </table>
           </div>
 
           <!-- Mobile Cards -->
           <div id="logs-mobile-cards" class="mobile-card-list">
-            <!-- Dynamically populated -->
+            <!-- Real-time Firestore sync -->
           </div>
         </section>
 
@@ -730,7 +717,7 @@
 
   <!-- 1. School Detail Modal -->
   <div id="modal-school-detail" class="modal-backdrop">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
       <div class="modal-header">
         <h3 class="modal-title">Institution Profile & Information</h3>
         <button class="modal-close-btn" data-modal-close="modal-school-detail" aria-label="Close modal">
@@ -746,7 +733,134 @@
     </div>
   </div>
 
-  <!-- 2. Force Logout Confirmation Modal -->
+  <!-- 2. Danger Zone: Permanently Delete School Confirmation Modal -->
+  <div id="modal-danger-delete-school" class="modal-backdrop">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header" style="background-color: #fff1f2; border-bottom-color: #fecdd3;">
+        <h3 class="modal-title" style="color: #9f1239; display: flex; align-items: center; gap: 8px;">
+          <svg style="width: 20px; height: 20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          Permanently Delete School
+        </h3>
+        <button class="modal-close-btn" data-modal-close="modal-danger-delete-school" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.875rem; color: #881337; font-weight: 600; margin-bottom: 8px;">
+          Warning: This action will permanently delete <span id="danger-delete-school-name" style="font-weight: 700;"></span> and its associated records from Cloud Firestore.
+        </p>
+        <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 16px;">
+          This action cannot be undone. Please type the exact School ID (<code id="danger-delete-school-id" style="color: #9f1239; font-weight: 700;"></code>) to confirm deletion:
+        </p>
+        <div class="form-group">
+          <input type="text" id="delete-school-confirm-input" class="form-input-text" placeholder="Type School ID here..." autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal-close="modal-danger-delete-school">Cancel</button>
+        <button class="btn btn-danger" id="confirm-permanent-delete-school-btn" disabled>Permanently Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Edit Individual User Permissions Modal -->
+  <div id="modal-user-permissions" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="modal-user-perm-title">User Permissions & Limits</h3>
+          <div style="font-size: 0.775rem; color: var(--color-text-muted);" id="modal-user-perm-sub">Individual configuration</div>
+        </div>
+        <button class="modal-close-btn" data-modal-close="modal-user-permissions" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          
+          <!-- 1. Editable -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">Record Editing (Editable)</div>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">Permission to modify existing student and academic entries.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="modal-perm-editable">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- 2. Add Student -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">Add Student</div>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">Permission to register and enroll new students.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="modal-perm-addStudent">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- 3. Delete Student -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: #dc2626;">Delete Student (Destructive)</div>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">High-risk permission to remove student records.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="modal-perm-deleteStudent">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- 4. Excel Export -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">Excel / CSV Export</div>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">Bulk export capabilities for spreadsheets.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="modal-perm-excelExport">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- 5. Reports -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">Reports & Analytics</div>
+              <div style="font-size: 0.75rem; color: var(--color-text-muted);">Access to view and generate performance reports.</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="modal-perm-reports">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- 6. Device Limit Control -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: #1d4ed8;">Concurrent Device Limit</div>
+              <div style="font-size: 0.75rem; color: #3b82f6;">Maximum simultaneous active device sessions allowed (1 to 15).</div>
+            </div>
+            <div class="stepper-control">
+              <button type="button" class="stepper-btn" onclick="window.stepModalDeviceLimit(-1)">-</button>
+              <span class="stepper-value" id="modal-device-limit-val">3</span>
+              <button type="button" class="stepper-btn" onclick="window.stepModalDeviceLimit(1)">+</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-modal-close="modal-user-permissions">Cancel</button>
+        <button class="btn btn-primary" id="save-user-permissions-modal-btn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Force Logout Confirmation Modal -->
   <div id="modal-force-logout" class="modal-backdrop">
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
@@ -766,7 +880,7 @@
           <!-- Target user info -->
         </div>
         <p style="font-size: 0.775rem; color: var(--color-text-muted);">
-          The connected device will be immediately signed out on its next request.
+          The connected device will be signed out on its next request.
         </p>
       </div>
       <div class="modal-footer">
@@ -776,34 +890,7 @@
     </div>
   </div>
 
-  <!-- 3. Password Reset Confirmation Modal -->
-  <div id="modal-password-reset" class="modal-backdrop">
-    <div class="modal-dialog modal-sm">
-      <div class="modal-header">
-        <h3 class="modal-title">Reset User Password</h3>
-        <button class="modal-close-btn" data-modal-close="modal-password-reset">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 0.875rem; color: var(--color-text-main); margin-bottom: 12px;">
-          Send a password reset instructions link to:
-        </p>
-        <div id="reset-user-email-display" style="padding: 8px 12px; background: #eff6ff; border-radius: 6px; font-weight: 600; color: #1d4ed8; font-size: 0.85rem; margin-bottom: 12px;">
-          user@school.edu
-        </div>
-        <p style="font-size: 0.75rem; color: var(--color-text-muted);">
-          The user will receive an email allowing them to securely set a new password.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-modal-close="modal-password-reset">Cancel</button>
-        <button class="btn btn-primary" onclick="window.confirmPasswordReset()">Send Reset Email</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4. Log Detail Payload Modal -->
+  <!-- 5. Log Detail Payload Modal -->
   <div id="modal-log-detail" class="modal-backdrop">
     <div class="modal-dialog">
       <div class="modal-header">
