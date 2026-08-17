@@ -19,16 +19,13 @@ import {
   sendPasswordResetEmail
 } from "../firebase.js";
 
-/**
- * Cloud Firestore Service Layer
- * Clean, production-quality implementation storing School Logo URL directly in Firestore.
- */
+// Super Admin UID constant for access control
+export const SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2";
 
 // Collection References
 const schoolsCol = collection(db, "schools");
 const usersCol = collection(db, "users");
-const sessionsCol = collection(db, "sessions");
-const logsCol = collection(db, "activityLogs");
+const studentsCol = collection(db, "students");
 
 /**
  * ============================================================================
@@ -43,14 +40,20 @@ export function subscribeToSchools(onData, onError) {
   try {
     const q = query(schoolsCol, orderBy("createdAt", "desc"));
     return onSnapshot(q, (snapshot) => {
-      const schools = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        createdDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Recently"
-      }));
+      const schools = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          schoolId: data.schoolId || d.id,
+          ...data,
+          lastUpdated: data.updatedAt?.toDate 
+            ? data.updatedAt.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) 
+            : (data.createdAt?.toDate ? data.createdAt.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Recently")
+        };
+      });
       onData(schools);
     }, (error) => {
-      console.warn("Schools snapshot listener error:", error);
+      console.warn("Schools listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
@@ -67,14 +70,17 @@ export function subscribeToUsers(onData, onError) {
   try {
     const q = query(usersCol, orderBy("createdAt", "desc"));
     return onSnapshot(q, (snapshot) => {
-      const users = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        createdDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Recently"
-      }));
+      const users = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          uid: data.uid || d.id,
+          ...data
+        };
+      });
       onData(users);
     }, (error) => {
-      console.warn("Users snapshot listener error:", error);
+      console.warn("Users listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
@@ -85,224 +91,165 @@ export function subscribeToUsers(onData, onError) {
 }
 
 /**
- * Subscribe to Active Sessions
+ * Subscribe to Students belonging to a specific School
  */
-export function subscribeToSessions(onData, onError) {
+export function subscribeToStudentsBySchool(schoolId, onData, onError) {
+  if (!schoolId) {
+    onData([]);
+    return () => {};
+  }
   try {
-    const q = query(sessionsCol, orderBy("lastActivity", "desc"), limit(50));
+    const q = query(studentsCol, where("schoolId", "==", schoolId), orderBy("createdAt", "desc"), limit(100));
     return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs.map((d) => ({
+      const students = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data()
       }));
-      onData(sessions);
+      onData(students);
     }, (error) => {
-      console.warn("Sessions snapshot listener error:", error);
+      console.warn("Students listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
   } catch (err) {
-    console.warn("Could not setup sessions listener:", err);
-    onData([]);
-  }
-}
-
-/**
- * Subscribe to Activity / Edit Audit Logs
- */
-export function subscribeToActivityLogs(onData, onError) {
-  try {
-    const q = query(logsCol, orderBy("timestamp", "desc"), limit(100));
-    return onSnapshot(q, (snapshot) => {
-      const logs = snapshot.docs.map((d) => {
-        const data = d.data();
-        let formattedTime = "Recently";
-        if (data.timestamp?.toDate) {
-          formattedTime = data.timestamp.toDate().toLocaleString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit"
-          });
-        }
-        return {
-          id: d.id,
-          ...data,
-          formattedTime
-        };
-      });
-      onData(logs);
-    }, (error) => {
-      console.warn("Activity logs listener error:", error);
-      if (onError) onError(error);
-      else onData([]);
-    });
-  } catch (err) {
-    console.warn("Could not setup logs listener:", err);
+    console.warn("Could not setup students listener:", err);
     onData([]);
   }
 }
 
 /**
  * ============================================================================
- * 2. SCHOOL OPERATIONS
+ * 2. SCHOOL ACCOUNT OPERATIONS
  * ============================================================================
  */
 
 /**
- * Create a new School with School Logo URL
+ * Register / Configure an Existing School Account
  */
-export async function createSchool({ name, shortCode, schoolId, adminEmail, address, status, logoUrl }) {
-  const finalSchoolId = schoolId ? schoolId.trim().toUpperCase() : `SCH-${Math.floor(1000 + Math.random() * 9000)}`;
-  const finalShortCode = shortCode ? shortCode.trim().toUpperCase() : name.substring(0, 3).toUpperCase();
+export async function saveSchoolAccount({
+  schoolId,
+  schoolName,
+  logoUrl = "",
+  address = "",
+  adminEmail = "",
+  status = "Active"
+}) {
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+  const cleanSchoolName = schoolName.trim();
   const cleanLogoUrl = logoUrl ? logoUrl.trim() : "";
 
-  const schoolDocRef = doc(db, "schools", finalSchoolId);
+  const schoolDocRef = doc(db, "schools", cleanSchoolId);
+  const existingDoc = await getDoc(schoolDocRef);
+
   const schoolData = {
-    name: name.trim(),
-    shortCode: finalShortCode,
+    schoolId: cleanSchoolId,
+    name: cleanSchoolName,
+    schoolName: cleanSchoolName,
     logoUrl: cleanLogoUrl,
-    logoInitial: name.substring(0, 2).toUpperCase(),
+    logoInitial: cleanSchoolName.substring(0, 2).toUpperCase(),
     status: status || "Active",
-    usersCount: 0,
-    adminEmail: adminEmail.trim().toLowerCase(),
     address: address ? address.trim() : "Campus Address",
-    createdAt: serverTimestamp(),
+    adminEmail: adminEmail ? adminEmail.trim().toLowerCase() : "",
+    usersCount: existingDoc.exists() ? (existingDoc.data().usersCount || 0) : 0,
+    studentsCount: existingDoc.exists() ? (existingDoc.data().studentsCount || 0) : 0,
     updatedAt: serverTimestamp()
   };
 
-  await setDoc(schoolDocRef, schoolData);
+  if (!existingDoc.exists()) {
+    schoolData.createdAt = serverTimestamp();
+  }
 
-  // Log system activity
-  await logSystemActivity({
-    action: "Add",
-    module: "Schools",
-    recordName: `${name} (${finalSchoolId})`,
-    field: "School Registration",
-    oldValue: "None",
-    newValue: `Status: ${status || 'Active'}`,
-    school: name
-  });
-
-  return { id: finalSchoolId, ...schoolData };
+  await setDoc(schoolDocRef, schoolData, { merge: true });
+  return { id: cleanSchoolId, ...schoolData };
 }
 
 /**
- * Update an existing School
+ * Update School Details
  */
 export async function updateSchool(schoolId, updateData) {
-  const schoolDocRef = doc(db, "schools", schoolId);
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+  const schoolDocRef = doc(db, "schools", cleanSchoolId);
   await updateDoc(schoolDocRef, {
     ...updateData,
     updatedAt: serverTimestamp()
-  });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Schools",
-    recordName: `School #${schoolId}`,
-    field: "Profile Update",
-    oldValue: "Previous",
-    newValue: "Updated",
-    school: updateData.name || schoolId
   });
 }
 
 /**
  * Toggle School Status (Active <-> Inactive)
  */
-export async function toggleSchoolStatus(schoolId, currentStatus, schoolName = "School") {
+export async function toggleSchoolStatus(schoolId, currentStatus) {
+  const cleanSchoolId = schoolId.trim().toUpperCase();
   const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
-  const schoolDocRef = doc(db, "schools", schoolId);
+  const schoolDocRef = doc(db, "schools", cleanSchoolId);
   await updateDoc(schoolDocRef, {
     status: newStatus,
     updatedAt: serverTimestamp()
   });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Schools",
-    recordName: `${schoolName} (${schoolId})`,
-    field: "Status",
-    oldValue: currentStatus,
-    newValue: newStatus,
-    school: schoolName
-  });
-
   return newStatus;
 }
 
 /**
- * Permanently Delete School (Danger Zone)
+ * Permanently Delete School
  */
-export async function permanentlyDeleteSchool(schoolId, schoolName = "School") {
-  const schoolDocRef = doc(db, "schools", schoolId);
+export async function permanentlyDeleteSchool(schoolId) {
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+  const schoolDocRef = doc(db, "schools", cleanSchoolId);
   await deleteDoc(schoolDocRef);
-
-  await logSystemActivity({
-    action: "Delete",
-    module: "Schools",
-    recordName: `${schoolName} (${schoolId})`,
-    field: "Permanent Removal",
-    oldValue: "Active Record",
-    newValue: "Deleted",
-    school: schoolName
-  });
 }
 
 /**
  * ============================================================================
- * 3. MULTI-USER MANAGEMENT & PER-USER PERMISSIONS
+ * 3. USER ACCOUNT OPERATIONS (Configuring Existing Firebase Authentication accounts)
  * ============================================================================
  */
 
 /**
- * Create a User under a School
+ * Configure an Existing Firebase Authentication User Account under a School
  */
-export async function createUser({
+export async function saveUserAccount({
+  uid,
   schoolId,
-  schoolName,
-  name,
-  email,
-  role = "Teacher",
+  displayName = "",
+  email = "",
   status = "Active",
   deviceLimit = 3,
   permissions = {}
 }) {
-  const cleanEmail = email.trim().toLowerCase();
-  const userId = `USR-${Math.floor(1000 + Math.random() * 9000)}`;
-  const userDocRef = doc(db, "users", userId);
+  const cleanUid = uid.trim();
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+  const cleanEmail = email ? email.trim().toLowerCase() : "";
+  const cleanName = displayName ? displayName.trim() : (cleanEmail.split("@")[0] || "User");
+
+  const userDocRef = doc(db, "users", cleanUid);
+  const existingDoc = await getDoc(userDocRef);
 
   const defaultPermissions = {
-    editable: permissions.editable !== undefined ? permissions.editable : true,
-    addStudent: permissions.addStudent !== undefined ? permissions.addStudent : true,
-    deleteStudent: permissions.deleteStudent !== undefined ? permissions.deleteStudent : false,
-    excelExport: permissions.excelExport !== undefined ? permissions.excelExport : true,
-    reports: permissions.reports !== undefined ? permissions.reports : false
+    editable: permissions.editable !== undefined ? !!permissions.editable : true,
+    addStudent: permissions.addStudent !== undefined ? !!permissions.addStudent : true,
+    deleteStudent: permissions.deleteStudent !== undefined ? !!permissions.deleteStudent : false,
+    excelExport: permissions.excelExport !== undefined ? !!permissions.excelExport : true,
+    reports: permissions.reports !== undefined ? !!permissions.reports : false
   };
 
   const userData = {
-    userId,
-    schoolId,
-    schoolName,
-    name: name.trim(),
+    uid: cleanUid,
+    type: "user",
+    schoolId: cleanSchoolId,
+    name: cleanName,
+    displayName: cleanName,
     email: cleanEmail,
-    role,
-    status,
-    deviceLimit: Number(deviceLimit) || 3,
+    status: status || "Active",
+    deviceLimit: Math.max(1, Math.min(15, Number(deviceLimit) || 3)),
     permissions: defaultPermissions,
-    lastLogin: null,
-    createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
 
-  await setDoc(userDocRef, userData);
-
-  // Increment school user count
-  if (schoolId) {
+  if (!existingDoc.exists()) {
+    userData.createdAt = serverTimestamp();
+    // Increment school user count
     try {
-      const schoolDocRef = doc(db, "schools", schoolId);
+      const schoolDocRef = doc(db, "schools", cleanSchoolId);
       await updateDoc(schoolDocRef, {
         usersCount: increment(1)
       });
@@ -311,180 +258,118 @@ export async function createUser({
     }
   }
 
-  // Log activity
-  await logSystemActivity({
-    action: "Add",
-    module: "Users",
-    recordName: `${name} (${cleanEmail})`,
-    field: "User Account",
-    oldValue: "None",
-    newValue: `Role: ${role}, School: ${schoolName}`,
-    school: schoolName
-  });
-
-  return { id: userId, ...userData };
-}
-
-/**
- * Update an existing User Document
- */
-export async function updateUser(userId, updateData) {
-  const userDocRef = doc(db, "users", userId);
-  await updateDoc(userDocRef, {
-    ...updateData,
-    updatedAt: serverTimestamp()
-  });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Users",
-    recordName: `User #${userId}`,
-    field: "Profile Update",
-    oldValue: "Previous",
-    newValue: "Updated",
-    school: updateData.schoolName || "School"
-  });
+  await setDoc(userDocRef, userData, { merge: true });
+  return { id: cleanUid, ...userData };
 }
 
 /**
  * Update Individual User Permissions
  */
-export async function updateUserPermissions(userId, permissions, userName = "User", schoolName = "School") {
-  const userDocRef = doc(db, "users", userId);
+export async function updateUserPermissions(uid, permissions) {
+  const cleanUid = uid.trim();
+  const userDocRef = doc(db, "users", cleanUid);
   await updateDoc(userDocRef, {
     permissions,
     updatedAt: serverTimestamp()
-  });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Permissions",
-    recordName: `${userName} (${userId})`,
-    field: "Permission Policy",
-    oldValue: "Previous",
-    newValue: "Updated Individual Permissions",
-    school: schoolName
   });
 }
 
 /**
  * Update Individual User Device Limit
  */
-export async function updateUserDeviceLimit(userId, deviceLimit, userName = "User", schoolName = "School") {
-  const userDocRef = doc(db, "users", userId);
+export async function updateUserDeviceLimit(uid, deviceLimit) {
+  const cleanUid = uid.trim();
+  const userDocRef = doc(db, "users", cleanUid);
   const newLimit = Math.max(1, Math.min(15, Number(deviceLimit) || 1));
   await updateDoc(userDocRef, {
     deviceLimit: newLimit,
     updatedAt: serverTimestamp()
   });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Permissions",
-    recordName: `${userName} (${userId})`,
-    field: "Device Limit",
-    oldValue: "Previous",
-    newValue: `${newLimit} Devices`,
-    school: schoolName
-  });
-
   return newLimit;
 }
 
 /**
  * Toggle User Status (Active <-> Inactive)
  */
-export async function toggleUserStatus(userId, currentStatus, userName = "User", schoolName = "School") {
+export async function toggleUserStatus(uid, currentStatus) {
+  const cleanUid = uid.trim();
   const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
-  const userDocRef = doc(db, "users", userId);
+  const userDocRef = doc(db, "users", cleanUid);
   await updateDoc(userDocRef, {
     status: newStatus,
     updatedAt: serverTimestamp()
   });
-
-  await logSystemActivity({
-    action: "Edit",
-    module: "Users",
-    recordName: `${userName} (${userId})`,
-    field: "User Status",
-    oldValue: currentStatus,
-    newValue: newStatus,
-    school: schoolName
-  });
-
   return newStatus;
 }
 
 /**
- * Send Password Reset Email via Firebase Auth
+ * Delete User Configuration
+ */
+export async function deleteUserAccount(uid, schoolId) {
+  const cleanUid = uid.trim();
+  const userDocRef = doc(db, "users", cleanUid);
+  await deleteDoc(userDocRef);
+
+  if (schoolId) {
+    try {
+      const schoolDocRef = doc(db, "schools", schoolId.trim().toUpperCase());
+      await updateDoc(schoolDocRef, {
+        usersCount: increment(-1)
+      });
+    } catch (e) {
+      console.warn("Could not decrement user count:", e);
+    }
+  }
+}
+
+/**
+ * Trigger Password Reset Email
  */
 export async function sendUserPasswordReset(email) {
-  await sendPasswordResetEmail(auth, email);
-  await logSystemActivity({
-    action: "Edit",
-    module: "Security",
-    recordName: email,
-    field: "Password Reset",
-    oldValue: "Existing Password",
-    newValue: "Reset Link Dispatched",
-    school: "Global"
-  });
+  if (!email) throw new Error("No email provided");
+  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
 }
 
 /**
- * Force Terminate / Logout Session
+ * ============================================================================
+ * 4. STUDENT DATA & EXCEL IMPORT OPERATIONS (Per School)
+ * ============================================================================
  */
-export async function terminateSession(sessionId, userEmail = "User", schoolName = "School") {
-  try {
-    const sessionDocRef = doc(db, "sessions", sessionId);
-    await deleteDoc(sessionDocRef);
-  } catch (e) {
-    console.warn("Session deletion in Firestore skipped:", e);
+
+/**
+ * Batch import validated student records for a specific school
+ */
+export async function importStudentsBatch(schoolId, studentsList) {
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+  if (!cleanSchoolId || !Array.isArray(studentsList) || studentsList.length === 0) {
+    throw new Error("Invalid student data payload.");
   }
 
-  await logSystemActivity({
-    action: "Delete",
-    module: "Sessions",
-    recordName: `Session #${sessionId}`,
-    field: "Force Logout",
-    oldValue: "Connected",
-    newValue: "Terminated",
-    school: schoolName
-  });
-}
+  let importedCount = 0;
 
-/**
- * ============================================================================
- * 4. SYSTEM AUDIT LOGGING
- * ============================================================================
- */
-export async function logSystemActivity({
-  action = "Edit",
-  module = "System",
-  recordName = "",
-  field = "Record",
-  oldValue = "",
-  newValue = "",
-  school = "System"
-}) {
+  for (const student of studentsList) {
+    const studentDocRef = doc(studentsCol);
+    await setDoc(studentDocRef, {
+      schoolId: cleanSchoolId,
+      studentName: student.studentName || student.name || "Student",
+      className: student.className || student.class || "",
+      rollNo: student.rollNo ? String(student.rollNo) : "",
+      fatherName: student.fatherName || "",
+      createdAt: serverTimestamp()
+    });
+    importedCount++;
+  }
+
+  // Update school's studentsCount
   try {
-    const currentUser = auth.currentUser;
-    const userEmail = currentUser ? currentUser.email : "admin@schoolportal.com";
-    const userName = currentUser ? (currentUser.displayName || "Super Admin") : "Super Admin";
-
-    await addDoc(logsCol, {
-      user: userName,
-      userEmail,
-      school,
-      action,
-      module,
-      recordName,
-      field,
-      oldValue: String(oldValue),
-      newValue: String(newValue),
-      timestamp: serverTimestamp()
+    const schoolDocRef = doc(db, "schools", cleanSchoolId);
+    await updateDoc(schoolDocRef, {
+      studentsCount: increment(importedCount),
+      updatedAt: serverTimestamp()
     });
   } catch (err) {
-    console.warn("Could not log activity in Firestore:", err);
+    console.warn("Could not update school student count:", err);
   }
+
+  return importedCount;
 }
