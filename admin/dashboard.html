@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - School Data Portal</title>
+  <meta name="description" content="Administration Dashboard for School Data Portal">
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="../css/dashboard.css">
+
+  <!-- Import Map for Firebase Modular SDK in browser -->
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Full-page authentication protection loader -->
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-spinner" aria-hidden="true"></div>
+    <p class="page-loader-text">Authenticating session...</p>
+  </div>
+
+  <!-- Mobile backdrop -->
+  <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+  <div class="dashboard-layout">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+            <path d="M6 6h10"></path>
+            <path d="M6 10h10"></path>
+            <path d="M6 14h6"></path>
+          </svg>
+        </div>
+        <div class="sidebar-brand-text">
+          <span class="sidebar-brand-title">School Data Portal</span>
+          <span class="sidebar-brand-badge">Administration</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Main Menu</div>
+        <ul class="nav-list">
+          <li>
+            <a href="./dashboard.html" class="nav-item-link active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="7" height="9" x="3" y="3" rx="1"></rect>
+                <rect width="7" height="5" x="14" y="3" rx="1"></rect>
+                <rect width="7" height="9" x="14" y="12" rx="1"></rect>
+                <rect width="7" height="5" x="3" y="16" rx="1"></rect>
+              </svg>
+              <span>Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              <span>Users</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+              </svg>
+              <span>Students</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+              </svg>
+              <span>Teachers</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                <path d="M3 9h18"></path>
+                <path d="M9 21V9"></path>
+              </svg>
+              <span>Classes</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+        </ul>
+
+        <div class="nav-section-label">Academic & Operations</div>
+        <ul class="nav-list">
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span>Attendance</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="20" height="14" x="2" y="5" rx="2"></rect>
+                <line x1="2" y1="10" x2="22" y2="10"></line>
+              </svg>
+              <span>Fees</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+              <span>Exams & Results</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"></line>
+                <line x1="12" y1="20" x2="12" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="14"></line>
+              </svg>
+              <span>Reports</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item-link disabled" title="Module under development" onclick="return false;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <span>Settings</span>
+              <span class="nav-badge-soon">Soon</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        School Data Portal v1.0
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="main-wrapper">
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button id="mobile-toggle-btn" class="mobile-nav-toggle" aria-label="Toggle navigation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div class="header-title-wrapper">
+            <h1>Admin Dashboard</h1>
+            <span class="header-subtitle">Overview & Control Center</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- Active Admin Profile Chip -->
+          <div class="user-profile-chip" id="user-chip">
+            <div class="user-avatar" id="user-avatar-initial">A</div>
+            <span class="user-email-text" id="admin-email-display">Loading...</span>
+          </div>
+
+          <!-- Logout Button -->
+          <button id="logout-btn" class="btn-logout" title="Sign out of Admin Portal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Logout</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dashboard Main Content -->
+      <main class="content-body">
+        <!-- Welcome banner -->
+        <section class="welcome-banner">
+          <h2>Welcome back, Administrator</h2>
+          <p>Authentication established. You have full access to manage school resources, users, and academic records.</p>
+        </section>
+
+        <!-- Stats Overview Cards Grid -->
+        <section class="stats-grid" aria-label="Quick statistics">
+          <!-- Total Students -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Total Students</span>
+              <div class="stat-icon-wrapper stat-icon-blue" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-footer">Database collection pending</div>
+          </div>
+
+          <!-- Total Teachers -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Total Teachers</span>
+              <div class="stat-icon-wrapper stat-icon-emerald" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-footer">Database collection pending</div>
+          </div>
+
+          <!-- Total Classes -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Total Classes</span>
+              <div class="stat-icon-wrapper stat-icon-violet" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                  <path d="M3 9h18"></path>
+                  <path d="M9 21V9"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-footer">Database collection pending</div>
+          </div>
+
+          <!-- Active Users -->
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-title">Active Users</span>
+              <div class="stat-icon-wrapper stat-icon-amber" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-value">0</div>
+            <div class="stat-footer">Database collection pending</div>
+          </div>
+        </section>
+
+        <!-- Ready for Next Phase Notice Card -->
+        <section class="notice-card">
+          <div class="notice-card-header">
+            <h3>Portal Infrastructure Ready</h3>
+            <span class="status-badge-ready">Phase 1 Complete</span>
+          </div>
+          <p>
+            Firebase Authentication session is active and protected. Firestore instance is initialized and ready for students, teachers, classes, and records in the upcoming development phases.
+          </p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    if (window.location.protocol === 'file:') {
+      const loaderText = document.querySelector('.page-loader-text');
+      if (loaderText) {
+        loaderText.innerHTML = '⚠️ <strong>Local Server Required:</strong> ES Modules cannot run directly from <code>file:///</code>.<br>Please open using <strong>Live Server</strong> or <code>npm run dev</code>.';
+      }
+    }
+  </script>
+  <script type="module" src="../js/dashboard.js"></script>
+</body>
+</html>

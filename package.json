@@ -1,0 +1,17 @@
+{
+  "name": "school-data-portal",
+  "version": "1.0.0",
+  "description": "School Data Portal - Admin Management System",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.12.2"
+  },
+  "devDependencies": {
+    "vite": "^5.3.1"
+  }
+}
