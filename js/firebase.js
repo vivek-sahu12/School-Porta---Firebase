@@ -24,12 +24,6 @@ import {
   serverTimestamp,
   increment
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "firebase/storage";
 
 // Firebase web app configuration
 const firebaseConfig = {
@@ -46,13 +40,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
 
 export {
   app,
   auth,
   db,
-  storage,
   // Auth
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -73,9 +65,5 @@ export {
   orderBy,
   limit,
   serverTimestamp,
-  increment,
-  // Storage
-  ref,
-  uploadBytes,
-  getDownloadURL
+  increment
 };

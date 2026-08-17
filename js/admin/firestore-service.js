@@ -1,7 +1,6 @@
 import {
   auth,
   db,
-  storage,
   collection,
   doc,
   getDoc,
@@ -17,15 +16,12 @@ import {
   limit,
   serverTimestamp,
   increment,
-  sendPasswordResetEmail,
-  ref,
-  uploadBytes,
-  getDownloadURL
+  sendPasswordResetEmail
 } from "../firebase.js";
 
 /**
- * Cloud Firestore & Firebase Storage Service Layer
- * Clean, production-quality implementation with zero hardcoded demo data.
+ * Cloud Firestore Service Layer
+ * Clean, production-quality implementation storing School Logo URL directly in Firestore.
  */
 
 // Collection References
@@ -54,7 +50,7 @@ export function subscribeToSchools(onData, onError) {
       }));
       onData(schools);
     }, (error) => {
-      console.warn("Schools snapshot listener error (falling back to empty list):", error);
+      console.warn("Schools snapshot listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
@@ -78,7 +74,7 @@ export function subscribeToUsers(onData, onError) {
       }));
       onData(users);
     }, (error) => {
-      console.warn("Users snapshot listener error (falling back to empty list):", error);
+      console.warn("Users snapshot listener error:", error);
       if (onError) onError(error);
       else onData([]);
     });
@@ -150,36 +146,23 @@ export function subscribeToActivityLogs(onData, onError) {
 
 /**
  * ============================================================================
- * 2. SCHOOL OPERATIONS (Cloud Firestore & Firebase Storage)
+ * 2. SCHOOL OPERATIONS
  * ============================================================================
  */
 
 /**
- * Create a new School
+ * Create a new School with School Logo URL
  */
-export async function createSchool({ name, shortCode, schoolId, adminEmail, address, status, logoFile }) {
+export async function createSchool({ name, shortCode, schoolId, adminEmail, address, status, logoUrl }) {
   const finalSchoolId = schoolId ? schoolId.trim().toUpperCase() : `SCH-${Math.floor(1000 + Math.random() * 9000)}`;
   const finalShortCode = shortCode ? shortCode.trim().toUpperCase() : name.substring(0, 3).toUpperCase();
-  
-  let logoUrl = "";
-  
-  // Upload logo to Firebase Storage if provided
-  if (logoFile && logoFile.size > 0) {
-    try {
-      const storagePath = `school-logos/${finalSchoolId}_${Date.now()}_${logoFile.name}`;
-      const storageRef = ref(storage, storagePath);
-      const snapshot = await uploadBytes(storageRef, logoFile);
-      logoUrl = await getDownloadURL(snapshot.ref);
-    } catch (uploadErr) {
-      console.warn("Storage upload failed or storage not initialized; using default badge:", uploadErr);
-    }
-  }
+  const cleanLogoUrl = logoUrl ? logoUrl.trim() : "";
 
   const schoolDocRef = doc(db, "schools", finalSchoolId);
   const schoolData = {
     name: name.trim(),
     shortCode: finalShortCode,
-    logoUrl,
+    logoUrl: cleanLogoUrl,
     logoInitial: name.substring(0, 2).toUpperCase(),
     status: status || "Active",
     usersCount: 0,

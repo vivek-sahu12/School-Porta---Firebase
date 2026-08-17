@@ -20,8 +20,7 @@
     "imports": {
       "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
       "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
-      "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
     }
   }
   </script>
@@ -490,9 +489,14 @@
 
                 <div class="form-grid-2">
                   <div class="form-group">
-                    <label class="form-label" for="new-school-logo">School Logo (Upload to Firebase Storage)</label>
-                    <input type="file" id="new-school-logo" class="form-input-text" accept="image/*" style="padding: 7px 12px;">
-                    <span class="form-helper-text">PNG, JPG, or SVG image.</span>
+                    <label class="form-label" for="new-school-logo-url">School Logo URL</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <input type="url" id="new-school-logo-url" class="form-input-text" placeholder="https://example.com/logo.png" style="flex: 1;">
+                      <div id="new-school-logo-preview" style="width: 42px; height: 42px; border-radius: 6px; border: 1px dashed var(--color-border); display: flex; align-items: center; justify-content: center; background: #f8fafc; flex-shrink: 0; overflow: hidden;" title="Live Logo Preview">
+                        <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">Logo</span>
+                      </div>
+                    </div>
+                    <span class="form-helper-text">Direct image URL. Preview displays automatically.</span>
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="new-school-address">Campus Address</label>

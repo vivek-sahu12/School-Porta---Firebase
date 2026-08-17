@@ -225,6 +225,29 @@ function setupTabs() {
  * Setup Forms (Add School, Create User)
  */
 function setupForms() {
+  // Live School Logo URL Preview
+  const logoUrlInput = document.getElementById("new-school-logo-url");
+  const logoPreviewBox = document.getElementById("new-school-logo-preview");
+
+  if (logoUrlInput && logoPreviewBox) {
+    logoUrlInput.addEventListener("input", () => {
+      const url = logoUrlInput.value.trim();
+      if (!url) {
+        logoPreviewBox.innerHTML = `<span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">Logo</span>`;
+        return;
+      }
+
+      const img = new Image();
+      img.src = url;
+      img.onload = () => {
+        logoPreviewBox.innerHTML = `<img src="${url}" alt="Preview" style="width: 100%; height: 100%; object-fit: cover;">`;
+      };
+      img.onerror = () => {
+        logoPreviewBox.innerHTML = `<span style="font-size: 0.65rem; color: #ef4444; font-weight: 600; text-align: center;">Invalid</span>`;
+      };
+    });
+  }
+
   // 1. Create School Form Submission
   const formCreateSchool = document.getElementById("form-create-school");
   if (formCreateSchool) {
@@ -241,8 +264,7 @@ function setupForms() {
       const adminEmail = document.getElementById("new-school-admin").value.trim();
       const address = document.getElementById("new-school-address").value.trim();
       const status = document.getElementById("new-school-status").value;
-      const logoInput = document.getElementById("new-school-logo");
-      const logoFile = logoInput?.files?.[0] || null;
+      const logoUrl = document.getElementById("new-school-logo-url")?.value.trim() || "";
 
       if (!name || !adminEmail) {
         showToast("Please enter school name and admin email.", "warning");
@@ -261,12 +283,14 @@ function setupForms() {
           adminEmail,
           address,
           status,
-          logoFile
+          logoUrl
         });
 
         formCreateSchool.reset();
+        if (logoPreviewBox) {
+          logoPreviewBox.innerHTML = `<span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">Logo</span>`;
+        }
         showToast(`School "${name}" registered successfully!`, "success");
-        // Switch back to schools tab
         document.querySelector('[data-tab="tab-schools-list"]')?.click();
       } catch (err) {
         console.error("Error creating school:", err);
@@ -622,6 +646,26 @@ function renderOverviewSessionsPreview() {
 /**
  * 2. Schools & Users Table Rendering
  */
+
+/**
+ * Helper to render school logo with resilient onerror fallback to monogram badge
+ */
+function getSchoolLogoHtml(school, size = 34) {
+  const initial = school.logoInitial || (school.name ? school.name.substring(0, 2).toUpperCase() : "SC");
+  const cleanUrl = school.logoUrl ? school.logoUrl.trim() : "";
+  if (cleanUrl) {
+    return `
+      <div style="position: relative; width: ${size}px; height: ${size}px; flex-shrink: 0;">
+        <img src="${cleanUrl}" alt="${school.name}" 
+             style="width: 100%; height: 100%; border-radius: 6px; object-fit: cover; display: block;" 
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="school-logo-badge" style="display: none; width: 100%; height: 100%; position: absolute; inset: 0;">${initial}</div>
+      </div>
+    `;
+  }
+  return `<div class="school-logo-badge" style="width: ${size}px; height: ${size}px;">${initial}</div>`;
+}
+
 function renderSchoolsTable(schools = liveSchools) {
   const tbody = document.getElementById("schools-table-body");
   const mobileContainer = document.getElementById("schools-mobile-cards");
@@ -645,15 +689,13 @@ function renderSchoolsTable(schools = liveSchools) {
   }
 
   tbody.innerHTML = schools.map((s) => {
-    const logoBadge = s.logoUrl 
-      ? `<img src="${s.logoUrl}" alt="${s.name}" style="width: 34px; height: 34px; border-radius: 6px; object-fit: cover;">` 
-      : `<div class="school-logo-badge">${s.logoInitial || s.name.substring(0, 2).toUpperCase()}</div>`;
+    const logoHtml = getSchoolLogoHtml(s, 34);
 
     return `
       <tr>
         <td>
           <div class="cell-school-info">
-            ${logoBadge}
+            ${logoHtml}
             <div>
               <div class="cell-school-name">${s.name}</div>
               <div class="cell-school-id">${s.id} &bull; Code: ${s.shortCode || 'SCH'}</div>
@@ -679,15 +721,13 @@ function renderSchoolsTable(schools = liveSchools) {
   }).join("");
 
   mobileContainer.innerHTML = schools.map((s) => {
-    const logoBadge = s.logoUrl 
-      ? `<img src="${s.logoUrl}" alt="${s.name}" style="width: 34px; height: 34px; border-radius: 6px; object-fit: cover;">` 
-      : `<div class="school-logo-badge">${s.logoInitial || s.name.substring(0, 2).toUpperCase()}</div>`;
+    const logoHtml = getSchoolLogoHtml(s, 34);
 
     return `
       <div class="mobile-data-card">
         <div class="mobile-card-header">
           <div class="cell-school-info">
-            ${logoBadge}
+            ${logoHtml}
             <div>
               <div class="cell-school-name">${s.name}</div>
               <div class="cell-school-id">${s.id}</div>
@@ -818,9 +858,7 @@ window.viewSchoolDetails = (schoolId) => {
   selectedSchoolForDetails = school;
   const schoolUsers = liveUsers.filter((u) => u.schoolId === school.id);
 
-  const logoBadge = school.logoUrl 
-    ? `<img src="${school.logoUrl}" alt="${school.name}" style="width: 52px; height: 52px; border-radius: 8px; object-fit: cover;">` 
-    : `<div class="school-logo-badge" style="width: 52px; height: 52px; font-size: 1.2rem;">${school.logoInitial || school.name.substring(0, 2).toUpperCase()}</div>`;
+  const logoBadge = getSchoolLogoHtml(school, 52);
 
   const content = document.getElementById("modal-school-detail-content");
   if (content) {
