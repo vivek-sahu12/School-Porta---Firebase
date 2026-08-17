@@ -1,4 +1,4 @@
-import { auth, signOut, onAuthStateChanged } from "./firebase.js";
+import { auth, signOut, onAuthStateChanged } from "../firebase.js";
 import { initSuperAdminUI, showToast, closeModal } from "./superadmin-ui.js";
 
 // DOM Elements
@@ -14,8 +14,8 @@ const logoutBtn = document.getElementById("logout-btn");
  */
 onAuthStateChanged(auth, (user) => {
   if (!user) {
-    // If not authenticated, redirect to login page
-    window.location.replace("../index.html");
+    // If not authenticated, redirect to Super Admin login page (admin/index.html)
+    window.location.replace("./index.html");
   } else {
     // Authenticated: Populate Super Admin user details
     const email = user.email || "Super Admin";
@@ -54,7 +54,8 @@ if (logoutBtn) {
         pageLoader.classList.remove("hidden");
       }
       await signOut(auth);
-      window.location.replace("../index.html");
+      // Redirect to Super Admin login page
+      window.location.replace("./index.html");
     } catch (error) {
       console.error("Logout Error:", error);
       if (pageLoader) {

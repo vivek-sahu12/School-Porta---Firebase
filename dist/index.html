@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Login - School Data Portal</title>
-  <meta name="description" content="Secure administrative login for School Data Portal">
+  <title>School Portal Login - School Data Portal</title>
+  <meta name="description" content="School Staff and Teacher Portal Login">
   
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,9 +23,9 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="/assets/main-BNLyNHc7.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/firebase-BntHPb53.js">
-  <link rel="stylesheet" crossorigin href="/assets/main--LhgmAo3.css">
+  <script type="module" crossorigin src="./assets/main-cwOqToBD.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/firebase-BntHPb53.js">
+  <link rel="stylesheet" crossorigin href="./assets/style--LhgmAo3.css">
 </head>
 <body>
   <noscript>
@@ -34,16 +34,16 @@
     </div>
   </noscript>
 
-  <!-- Local file protocol warning banner (hidden by default, shown if opened via file://) -->
+  <!-- Local file protocol warning banner (hidden by default) -->
   <div id="protocol-warning" style="display: none; padding: 12px 20px; background: #fef3c7; color: #92400e; text-align: center; font-size: 0.9rem; border-bottom: 1px solid #fde68a;">
-    ⚠️ <strong>Local Server Required:</strong> Firebase ES Modules cannot run directly from <code>file:///</code>. Please run via <strong>VS Code Live Server</strong>, <code>npm run dev</code>, or any local HTTP server.
+    ⚠️ <strong>Local Server Required:</strong> ES Modules cannot run directly from <code>file:///</code>. Please open using <strong>Live Server</strong> or <code>npm run dev</code>.
   </div>
 
   <main class="auth-wrapper">
     <div class="auth-card">
       <header class="auth-header">
         <div class="brand-icon-wrapper" aria-hidden="true">
-          <!-- Academic / School Building Icon -->
+          <!-- School Building Icon -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
             <path d="M6 6h10"></path>
@@ -52,7 +52,7 @@
           </svg>
         </div>
         <h1 class="auth-title">School Data Portal</h1>
-        <p class="auth-subtitle">Administration Portal</p>
+        <p class="auth-subtitle">Institution Staff & Teacher Portal</p>
       </header>
 
       <!-- Error message container -->
@@ -65,16 +65,32 @@
         <span id="auth-error-text"></span>
       </div>
 
-      <form id="login-form" class="auth-form" novalidate>
+      <form id="user-login-form" class="auth-form" novalidate>
         <div class="form-group">
-          <label for="email" class="form-label">Email Address</label>
+          <label for="school-code" class="form-label">School Code / Institution ID</label>
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="school-code"
+              name="schoolCode"
+              class="form-input"
+              placeholder="e.g. SXIA or SCH-1001"
+              required
+              autocapitalize="characters"
+              spellcheck="false"
+            >
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email" class="form-label">Staff / Teacher Email</label>
           <div class="input-wrapper">
             <input
               type="email"
               id="email"
               name="email"
               class="form-input"
-              placeholder="admin@school.edu"
+              placeholder="teacher@school.edu"
               required
               autocomplete="email"
               autocapitalize="none"
@@ -102,12 +118,10 @@
               aria-label="Show password"
               title="Show password"
             >
-              <!-- Eye open icon (default) -->
               <svg id="eye-icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
                 <circle cx="12" cy="12" r="3"></circle>
               </svg>
-              <!-- Eye off icon (hidden by default) -->
               <svg id="eye-icon-hide" style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
                 <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
@@ -120,12 +134,17 @@
 
         <button type="submit" id="login-btn" class="btn-primary">
           <span class="spinner" aria-hidden="true"></span>
-          <span class="btn-text">Sign In</span>
+          <span class="btn-text">Sign In to School Portal</span>
         </button>
       </form>
 
       <footer class="auth-footer">
-        <p>&copy; School Data Portal &bull; Authorized Personnel Only</p>
+        <p>&copy; School Data Portal &bull; Institutional Access</p>
+        <div style="margin-top: 12px;">
+          <a href="./admin/index.html" style="font-size: 0.8rem; color: #1d4ed8; text-decoration: none; font-weight: 600;">
+            Super Admin Control Login &rarr;
+          </a>
+        </div>
       </footer>
     </div>
   </main>

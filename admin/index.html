@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>School Portal Login - School Data Portal</title>
-  <meta name="description" content="School Staff and Teacher Portal Login">
-  
+  <title>Super Admin Login - School Data Portal</title>
+  <meta name="description" content="Centralized Super Administrator Login for School Data Portal">
+
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <link rel="stylesheet" href="./css/style.css">
-  
+
+  <link rel="stylesheet" href="../css/style.css">
+
   <!-- Import Map for Firebase Modular SDK in browser -->
   <script type="importmap">
   {
@@ -27,7 +27,7 @@
 <body>
   <noscript>
     <div style="padding: 20px; background: #fee2e2; color: #991b1b; text-align: center; font-weight: 600;">
-      JavaScript is required to run the School Data Portal. Please enable JavaScript in your browser.
+      JavaScript is required to access the Super Admin Portal. Please enable JavaScript in your browser.
     </div>
   </noscript>
 
@@ -39,17 +39,16 @@
   <main class="auth-wrapper">
     <div class="auth-card">
       <header class="auth-header">
-        <div class="brand-icon-wrapper" aria-hidden="true">
-          <!-- School Building Icon -->
+        <div class="brand-icon-wrapper" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: #ffffff;" aria-hidden="true">
+          <!-- Shield / Super Admin Icon -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 6h10"></path>
-            <path d="M6 10h10"></path>
-            <path d="M6 14h6"></path>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>
         </div>
         <h1 class="auth-title">School Data Portal</h1>
-        <p class="auth-subtitle">Institution Staff & Teacher Portal</p>
+        <p class="auth-subtitle" style="color: #1d4ed8; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em;">
+          Super Admin Control Portal
+        </p>
       </header>
 
       <!-- Error message container -->
@@ -62,32 +61,16 @@
         <span id="auth-error-text"></span>
       </div>
 
-      <form id="user-login-form" class="auth-form" novalidate>
+      <form id="login-form" class="auth-form" novalidate>
         <div class="form-group">
-          <label for="school-code" class="form-label">School Code / Institution ID</label>
-          <div class="input-wrapper">
-            <input
-              type="text"
-              id="school-code"
-              name="schoolCode"
-              class="form-input"
-              placeholder="e.g. SXIA or SCH-1001"
-              required
-              autocapitalize="characters"
-              spellcheck="false"
-            >
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="email" class="form-label">Staff / Teacher Email</label>
+          <label for="email" class="form-label">Super Admin Email</label>
           <div class="input-wrapper">
             <input
               type="email"
               id="email"
               name="email"
               class="form-input"
-              placeholder="teacher@school.edu"
+              placeholder="admin@schoolportal.com"
               required
               autocomplete="email"
               autocapitalize="none"
@@ -97,7 +80,7 @@
         </div>
 
         <div class="form-group">
-          <label for="password" class="form-label">Password</label>
+          <label for="password" class="form-label">Master Password</label>
           <div class="input-wrapper">
             <input
               type="password"
@@ -131,15 +114,15 @@
 
         <button type="submit" id="login-btn" class="btn-primary">
           <span class="spinner" aria-hidden="true"></span>
-          <span class="btn-text">Sign In to School Portal</span>
+          <span class="btn-text">Sign In as Super Admin</span>
         </button>
       </form>
 
       <footer class="auth-footer">
-        <p>&copy; School Data Portal &bull; Institutional Access</p>
+        <p>&copy; School Data Portal &bull; Super Admin Clearance Required</p>
         <div style="margin-top: 12px;">
-          <a href="./admin/index.html" style="font-size: 0.8rem; color: #1d4ed8; text-decoration: none; font-weight: 600;">
-            Super Admin Control Login &rarr;
+          <a href="../index.html" style="font-size: 0.8rem; color: #64748b; text-decoration: none; font-weight: 500;">
+            &larr; Switch to School / Staff Portal
           </a>
         </div>
       </footer>
@@ -152,6 +135,6 @@
       if (banner) banner.style.display = 'block';
     }
   </script>
-  <script type="module" src="./js/user/login.js"></script>
+  <script type="module" src="../js/admin/login.js"></script>
 </body>
 </html>
