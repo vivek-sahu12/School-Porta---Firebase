@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>School Dashboard - School Data Portal</title>
   <meta name="description" content="School Account Management Dashboard">
+  <meta name="theme-color" content="#4f46e5">
+
+  <!-- Favicon & PWA Icons -->
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -38,15 +44,12 @@
     <!-- Sidebar Navigation -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <div class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 6h10"></path><path d="M6 10h10"></path>
-          </svg>
+        <div class="brand-icon app-logo-brand">
+          <img src="./icon.svg" alt="School Data Portal Logo" class="brand-app-logo">
         </div>
         <div class="brand-text">
-          <h1 id="sidebar-school-title">School Portal</h1>
-          <span class="brand-badge" id="sidebar-school-id-badge">SCHOOL001</span>
+          <h1 id="sidebar-app-title">School Portal</h1>
+          <span class="brand-badge">Data Portal</span>
         </div>
       </div>
 
@@ -55,35 +58,38 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>
           <span>Dashboard</span>
         </a>
-        <a class="nav-link" data-view="school-info">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
-          <span>School Information</span>
+        <a class="nav-link" data-view="dataset-school_data" data-dataset="school_data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+          <span>School Data</span>
         </a>
-        <a class="nav-link" data-view="school-users">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-          <span>School Users</span>
+        <a class="nav-link" data-view="dataset-udise" data-dataset="udise">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>UDISE</span>
         </a>
-        <a class="nav-link" data-view="sessions">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
-          <span>Active Sessions</span>
-        </a>
-        <a class="nav-link" data-view="student-data">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-          <span>Student Data</span>
+        <a class="nav-link" data-view="dataset-three_point_zero" data-dataset="three_point_zero">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 9.17 4.24-4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="m9.17 14.83-4.24 4.24"></path></svg>
+          <span>3.0</span>
         </a>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="admin-pill">
-          <div class="admin-avatar" id="sidebar-user-avatar">SC</div>
-          <div class="admin-info">
-            <div class="admin-info-email" id="sidebar-user-email">school@abc.edu</div>
-            <div class="admin-info-role">School Account</div>
+        <div class="sidebar-account-box">
+          <div class="account-logo-circle" id="sidebar-account-logo">
+            <div class="school-avatar school-avatar-lg">
+              <span class="avatar-fallback" id="sidebar-logo-fallback">SC</span>
+            </div>
           </div>
+          <div class="account-info-stack">
+            <div class="account-school-name" id="sidebar-account-school-name">School Name</div>
+            <div class="account-school-id" id="sidebar-account-school-id">Unique ID</div>
+            <div class="account-role-badge" id="sidebar-account-role-label">School Account</div>
+            <div class="account-user-name" id="sidebar-account-user-name" style="display: none;">User Name</div>
+          </div>
+          <button id="school-logout-btn" class="btn-logout" title="Sign out" aria-label="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            <span>Logout</span>
+          </button>
         </div>
-        <button id="school-logout-btn" class="btn btn-secondary btn-icon btn-sm" title="Sign out">
-          <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-        </button>
       </div>
     </aside>
 
@@ -97,67 +103,158 @@
           <div class="top-bar-title" id="page-view-title">Dashboard</div>
         </div>
         <div class="top-bar-right">
-          <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="top-bar-controls">
+            <div id="portal-network-status-badge" class="network-status-badge status-online" title="Network Connection Status">
+              <span class="status-dot"></span>
+              <span>Online</span>
+            </div>
+            <button id="manual-sync-btn" class="btn btn-secondary btn-sm sync-control-btn" title="Manually synchronize data with server">
+              <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+              <span>Sync Data</span>
+            </button>
             <span id="top-school-status" class="badge badge-active">Active</span>
-            <span style="font-size: 0.85rem; font-weight: 700; color: var(--primary);" id="top-school-name">School Name</span>
           </div>
         </div>
       </header>
 
       <main class="content-area">
         <!-- ================================================================
-             VIEW 1: DASHBOARD (Overview)
+             VIEW 1: DASHBOARD (Student Data Analytics & Exploration)
              ================================================================ -->
         <section id="view-dashboard" class="school-view active">
-          <!-- 4 Clean Summary Cards -->
-          <div class="metrics-strip">
-            <div class="metric-box">
-              <div class="metric-box-title">Total Students</div>
-              <div class="metric-box-number" id="metric-students" style="color: #2563eb;">0</div>
-              <div class="metric-box-sub">Registered student records</div>
+          <!-- Overview Header with Home Dataset Selector -->
+          <div class="dashboard-overview-bar">
+            <div class="overview-title-group">
+              <h2 class="overview-title">Overview</h2>
+              <p class="overview-subtitle">Student analytics & dataset comparison</p>
             </div>
-            <div class="metric-box">
-              <div class="metric-box-title">Total School Users</div>
-              <div class="metric-box-number" id="metric-users">0</div>
-              <div class="metric-box-sub">Staff & teacher accounts</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-box-title">Active School Users</div>
-              <div class="metric-box-number" id="metric-active-users" style="color: #16a34a;">0</div>
-              <div class="metric-box-sub">Operational staff</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-box-title">Active Sessions</div>
-              <div class="metric-box-number" id="metric-sessions" style="color: #7c3aed;">0</div>
-              <div class="metric-box-sub">Connected device sessions</div>
+            <div class="dataset-selector-pill" id="dashboard-dataset-selector-wrapper">
+              <span class="dataset-selector-label">Viewing:</span>
+              <select id="dataset-selector" class="dataset-select-input" aria-label="Select Dataset">
+                <option value="school_data" selected>School Data</option>
+                <option value="udise">UDISE</option>
+                <option value="three_point_zero">3.0</option>
+              </select>
+              <svg class="dataset-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </div>
           </div>
 
-          <!-- School Quick Summary Card -->
-          <div class="section-panel-card">
-            <div class="panel-header">
-              <div class="panel-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
-                Institution Profile
+          <!-- 1. Unified Dataset Comparison Strip (3 Balanced Cards) -->
+          <div class="dataset-comparison-strip">
+            <div class="dataset-compare-card active" data-dataset="school_data" id="card-dataset-sd" role="button" tabindex="0">
+              <div class="compare-card-header">
+                <div class="dataset-dot sd"></div>
+                <span class="compare-dataset-name">School Data</span>
+                <span class="badge-active-pill" id="badge-active-sd">Active</span>
               </div>
-              <button class="btn btn-secondary btn-sm" onclick="window.navigateSchoolView('school-info')">View Details &rarr;</button>
+              <div class="compare-card-count" id="count-dataset-sd">0</div>
+              <div class="compare-card-hint">Total records</div>
             </div>
-            <div class="info-grid">
-              <div class="info-item">
-                <div class="info-label">School Name</div>
-                <div class="info-value" id="dash-school-name">—</div>
+
+            <div class="dataset-compare-card" data-dataset="udise" id="card-dataset-ud" role="button" tabindex="0">
+              <div class="compare-card-header">
+                <div class="dataset-dot ud"></div>
+                <span class="compare-dataset-name">UDISE</span>
+                <span class="badge-active-pill" id="badge-active-ud" style="display: none;">Active</span>
               </div>
-              <div class="info-item">
-                <div class="info-label">Unique School ID</div>
-                <div class="info-value" id="dash-school-id" style="color: #2563eb;">—</div>
+              <div class="compare-card-count" id="count-dataset-ud">0</div>
+              <div class="compare-card-hint">Total records</div>
+            </div>
+
+            <div class="dataset-compare-card" data-dataset="three_point_zero" id="card-dataset-p3" role="button" tabindex="0">
+              <div class="compare-card-header">
+                <div class="dataset-dot p3"></div>
+                <span class="compare-dataset-name">3.0</span>
+                <span class="badge-active-pill" id="badge-active-p3" style="display: none;">Active</span>
               </div>
-              <div class="info-item">
-                <div class="info-label">Contact Email</div>
-                <div class="info-value" id="dash-school-email">—</div>
+              <div class="compare-card-count" id="count-dataset-p3">0</div>
+              <div class="compare-card-hint">Total records</div>
+            </div>
+          </div>
+
+          <!-- 2. Selected Dataset Summary & Quick Search/Explore Bar (Positioned BEFORE Class Strength) -->
+          <div class="analytics-card dataset-summary-card">
+            <div class="dataset-summary-header">
+              <div class="dataset-summary-badge-group">
+                <span class="dataset-summary-tag" id="hero-dataset-tag">School Data</span>
+                <span class="dataset-summary-total">
+                  <strong id="dash-total-students-count">0</strong> Students
+                </span>
               </div>
-              <div class="info-item">
-                <div class="info-label">Campus Address</div>
-                <div class="info-value" id="dash-school-address">—</div>
+              <button class="btn btn-primary btn-sm explore-list-btn" id="hero-total-students-btn" title="Explore complete student roster">
+                <span>Explore List</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+            <div class="explore-search-box">
+              <div class="explore-input-wrapper">
+                <svg class="explore-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="explore-search-input" class="explore-input" placeholder="Search by student name, father name, scholar no, ID...">
+              </div>
+              <button id="explore-search-btn" class="btn btn-secondary btn-sm">Explore</button>
+            </div>
+          </div>
+
+          <!-- 3. Class Strength / Class Distribution Section -->
+          <div class="analytics-card">
+            <div class="analytics-card-header">
+              <div class="analytics-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+                <span>Class-Wise Student Strength</span>
+              </div>
+              <span class="analytics-card-hint">Tap class to view students</span>
+            </div>
+            <div class="class-strength-grid" id="class-strength-grid">
+              <!-- Dynamically populated class cards -->
+            </div>
+          </div>
+
+          <!-- 4. Two-Column Analytics Grid (Gender & 4-Column Category Distributions) -->
+          <div class="analytics-row-grid">
+            <!-- Gender Analytics Card -->
+            <div class="analytics-card">
+              <div class="analytics-card-header">
+                <div class="analytics-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>
+                  <span>Gender Distribution</span>
+                </div>
+                <span class="analytics-card-hint">Tap to filter</span>
+              </div>
+              <div class="gender-split-container">
+                <div class="gender-bar-wrapper">
+                  <div class="gender-bar-fill boys" id="gender-bar-boys" style="width: 50%;"></div>
+                  <div class="gender-bar-fill girls" id="gender-bar-girls" style="width: 50%;"></div>
+                </div>
+                <div class="gender-cards-row">
+                  <div class="gender-card boys" id="gender-card-boys" role="button" tabindex="0">
+                    <div class="gender-card-icon">👦</div>
+                    <div class="gender-card-info">
+                      <div class="gender-card-label">Boys</div>
+                      <div class="gender-card-count" id="dash-boys-count">0</div>
+                    </div>
+                  </div>
+                  <div class="gender-card girls" id="gender-card-girls" role="button" tabindex="0">
+                    <div class="gender-card-icon">👧</div>
+                    <div class="gender-card-info">
+                      <div class="gender-card-label">Girls</div>
+                      <div class="gender-card-count" id="dash-girls-count">0</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Category Analytics Card (4-Column Layout: GEN | OBC | SC | ST - No Percentages) -->
+            <div class="analytics-card">
+              <div class="analytics-card-header">
+                <div class="analytics-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                  <span>Category Distribution</span>
+                </div>
+                <span class="analytics-card-hint">Tap to filter</span>
+              </div>
+              <div class="category-four-grid" id="category-cards-grid">
+                <!-- Dynamically rendered 4-column category cards (GEN, OBC, SC, ST) -->
               </div>
             </div>
           </div>
@@ -200,6 +297,14 @@
               <div class="info-item">
                 <div class="info-label">Campus Address</div>
                 <div class="info-value" id="info-address">—</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Configured Class Range</div>
+                <div class="info-value" id="info-class-range" style="font-weight: 700; color: #1e3a8a;">—</div>
+              </div>
+              <div class="info-item" id="info-subjects-container" style="display: none; grid-column: 1 / -1;">
+                <div class="info-label">Offered Senior Subjects (Class 11/12)</div>
+                <div class="info-value" id="info-subjects-list" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">—</div>
               </div>
               <div class="info-item" style="grid-column: 1 / -1;">
                 <div class="info-label">School Logo URL</div>
@@ -285,7 +390,136 @@
 
 
         <!-- ================================================================
-             VIEW 5: STUDENT DATA (Prepared section)
+             VIEW 5: STUDENT LIST (Dedicated Mobile/PWA List & Filter Screen)
+             ================================================================ -->
+        <section id="view-student-list" class="school-view">
+          <div class="student-view-container">
+            <!-- Navigation Header -->
+            <div class="view-navigation-header">
+              <button class="btn btn-secondary btn-sm nav-back-btn" id="btn-back-to-dashboard" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                <span>Dashboard</span>
+              </button>
+              <div class="view-header-title-group">
+                <h2 class="view-heading" id="student-list-view-title">Student Records</h2>
+                <span class="badge badge-active" id="student-list-count-badge">0 Students</span>
+              </div>
+            </div>
+
+            <!-- Search & Filters Toolbar -->
+            <div class="student-list-toolbar">
+              <div class="student-search-bar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="student-list-search-input" placeholder="Search student name, father name, scholar no, ID...">
+                <button type="button" id="student-list-search-clear" class="search-clear-btn" style="display: none;">&times;</button>
+              </div>
+              <div class="student-filters-row">
+                <select id="filter-class-select" class="form-select filter-select" aria-label="Filter by class">
+                  <option value="">All Classes</option>
+                </select>
+                <select id="filter-gender-select" class="form-select filter-select" aria-label="Filter by gender">
+                  <option value="">All Genders</option>
+                  <option value="Boy">Boys</option>
+                  <option value="Girl">Girls</option>
+                </select>
+                <select id="filter-category-select" class="form-select filter-select" aria-label="Filter by category">
+                  <option value="">All Categories</option>
+                  <option value="GEN">GEN</option>
+                  <option value="OBC">OBC</option>
+                  <option value="SC">SC</option>
+                  <option value="ST">ST</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Student Cards Feed -->
+            <div class="student-cards-feed" id="student-cards-feed">
+              <!-- Dynamically populated student cards -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 6: STUDENT DETAIL (Dedicated Mobile/PWA Profile Screen)
+             ================================================================ -->
+        <section id="view-student-detail" class="school-view">
+          <div class="student-view-container">
+            <!-- Navigation Header -->
+            <div class="view-navigation-header">
+              <button class="btn btn-secondary btn-sm nav-back-btn" id="btn-back-to-student-list" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                <span>Student List</span>
+              </button>
+              <div class="view-header-title-group">
+                <span class="badge badge-active" id="detail-dataset-badge">School Data</span>
+              </div>
+            </div>
+
+            <!-- Profile Hero Banner -->
+            <div class="student-profile-hero">
+              <div class="student-avatar-lg" id="detail-avatar">S</div>
+              <div class="student-profile-info">
+                <h2 class="student-profile-name" id="detail-name">Student Name</h2>
+                <div class="student-profile-meta">
+                  <span class="meta-pill class-pill" id="detail-class-section">Class 1 • Sec A</span>
+                  <span class="meta-pill gender-pill" id="detail-gender">Boy</span>
+                  <span class="meta-pill cat-pill" id="detail-category">GEN</span>
+                  <span class="meta-pill status-pill" id="detail-status">Active</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Profile Modular Sections Grid -->
+            <div class="profile-sections-grid">
+              <!-- Section 1: Basic Details -->
+              <div class="profile-section-card">
+                <div class="profile-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  <span>Basic Information</span>
+                </div>
+                <div class="profile-field-list">
+                  <div class="profile-field-item"><span class="field-label">Student Name</span><span class="field-value" id="detail-field-name">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Date of Birth</span><span class="field-value" id="detail-field-dob">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Gender</span><span class="field-value" id="detail-field-gender">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Class & Section</span><span class="field-value" id="detail-field-class">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Roll Number</span><span class="field-value" id="detail-field-roll">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Scholar / Reg. No</span><span class="field-value" id="detail-field-scholar">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Admission Date</span><span class="field-value" id="detail-field-admission">—</span></div>
+                </div>
+              </div>
+
+              <!-- Section 2: Parent Information -->
+              <div class="profile-section-card">
+                <div class="profile-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                  <span>Parent & Guardian Information</span>
+                </div>
+                <div class="profile-field-list">
+                  <div class="profile-field-item"><span class="field-label">Father's Name</span><span class="field-value" id="detail-field-father">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Mother's Name</span><span class="field-value" id="detail-field-mother">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Primary Contact</span><span class="field-value" id="detail-field-parent-contact">—</span></div>
+                  <div class="profile-field-item"><span class="field-label">Residential Address</span><span class="field-value" id="detail-field-address">—</span></div>
+                </div>
+              </div>
+
+              <!-- Section 3: Dataset-Specific Identifiers -->
+              <div class="profile-section-card">
+                <div class="profile-section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                  <span id="detail-dataset-fields-title">Dataset Identifiers</span>
+                </div>
+                <div class="profile-field-list" id="detail-dataset-fields-container">
+                  <!-- Dynamically populated dataset fields -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             VIEW 7: STUDENT DATA MODULE (Roster & Import)
              ================================================================ -->
         <section id="view-student-data" class="school-view">
           <div class="section-panel-card">
@@ -299,7 +533,7 @@
               <svg style="width: 44px; height: 44px; color: var(--text-subtle); margin-bottom: 12px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
               <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main);">Student Roster Module Ready</h4>
               <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 460px; margin: 4px auto 0;">
-                Student records for this school are connected to <strong id="student-school-id-display"></strong>. The student management and upload workflow will be connected here.
+                Student records for this school are connected to <strong id="student-school-id-display"></strong>. Use the Dashboard to view interactive student analytics, explore rosters, and filter student profiles.
               </p>
             </div>
           </div>
@@ -442,6 +676,67 @@
               <input type="text" id="edit-address" class="form-input" placeholder="City, State">
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="edit-start-class">Starting Class *</label>
+              <select id="edit-start-class" class="form-select" required>
+                <option value="">-- Select Starting Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1">Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10">Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-end-class">Ending Class *</label>
+              <select id="edit-end-class" class="form-select" required>
+                <option value="">-- Select Ending Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1">Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10">Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Subject Configuration Section for Class 11 / 12 -->
+          <div id="edit-subjects-section" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 14px;">
+            <div style="font-size: 0.825rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+              <span>School Subjects (Class 11 & 12)</span>
+              <span class="badge badge-active" style="font-size: 0.65rem;">Senior Classes Included</span>
+            </div>
+            <div style="font-size: 0.725rem; color: var(--text-muted); margin-bottom: 8px;">Select or customize the subjects offered by your school.</div>
+            <div id="edit-subjects-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin-bottom: 10px;">
+              <!-- Subject checkboxes dynamically rendered -->
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="edit-custom-subject" class="form-input" placeholder="Add custom subject..." style="font-size: 0.775rem; padding: 5px 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="edit-add-subject-btn" style="white-space: nowrap; font-size: 0.75rem; padding: 5px 10px;">+ Add</button>
+            </div>
+          </div>
+
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
             <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-edit-school-info')">Cancel</button>
             <button type="submit" class="btn btn-primary">Update Information</button>

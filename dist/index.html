@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>School Portal Login - School Data Portal</title>
   <meta name="description" content="School Portal Authentication">
+  <meta name="theme-color" content="#4f46e5">
+
+  <!-- Favicon & PWA Icons -->
+  <link rel="icon" href="./assets/icon-BOSJock3.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./assets/icon-BOSJock3.svg">
+  <link rel="manifest" href="./assets/manifest-4mMUZuQz.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,20 +29,18 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="./assets/main-Dilj7CpM.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/firebase-B_iEtlpl.js">
+  <script type="module" crossorigin src="./assets/main-BCKI-p9A.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/firebase-BaMEv929.js">
+  <link rel="modulepreload" crossorigin href="./assets/session-manager-DIPlyXrz.js">
   <link rel="stylesheet" crossorigin href="./assets/main-Dz7ptu05.css">
 </head>
 <body class="login-page">
   <div class="login-wrapper">
     <div class="login-card">
-      <!-- Header -->
+      <!-- Header with Application Logo -->
       <div class="login-header">
-        <div class="school-brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 6h10"></path><path d="M6 10h10"></path>
-          </svg>
+        <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+          <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20512%20512'%20width='100%25'%20height='100%25'%3e%3cdefs%3e%3c!--%20Background%20Gradient%20--%3e%3clinearGradient%20id='bg-grad'%20x1='0%25'%20y1='0%25'%20x2='100%25'%20y2='100%25'%3e%3cstop%20offset='0%25'%20stop-color='%236366f1'%20/%3e%3cstop%20offset='100%25'%20stop-color='%234f46e5'%20/%3e%3c/linearGradient%3e%3c!--%20Shield/Book%20Gradient%20--%3e%3clinearGradient%20id='shield-grad'%20x1='0%25'%20y1='0%25'%20x2='0%25'%20y2='100%25'%3e%3cstop%20offset='0%25'%20stop-color='%23ffffff'%20stop-opacity='0.9'%20/%3e%3cstop%20offset='100%25'%20stop-color='%23ffffff'%20stop-opacity='0.6'%20/%3e%3c/linearGradient%3e%3c!--%20Shadow%20Filter%20--%3e%3cfilter%20id='shadow'%20x='-10%25'%20y='-10%25'%20width='120%25'%20height='120%25'%3e%3cfeDropShadow%20dx='0'%20dy='8'%20stdDeviation='12'%20flood-color='%23090d16'%20flood-opacity='0.3'%20/%3e%3c/filter%3e%3c/defs%3e%3c!--%20Maskable%20Safe%20Area%20/%20Background%20--%3e%3crect%20width='512'%20height='512'%20rx='112'%20fill='url(%23bg-grad)'%20/%3e%3c!--%20Shield%20Shape%20(Symbolizing%20Institution/Security)%20--%3e%3cg%20filter='url(%23shadow)'%3e%3cpath%20d='M256,80%20C310,80%20390,110%20390,110%20C390,110%20390,260%20350,335%20C310,410%20256,432%20256,432%20C256,432%20202,410%20162,335%20C122,260%20122,110%20122,110%20C122,110%20202,80%20256,80%20Z'%20fill='none'%20stroke='url(%23shield-grad)'%20stroke-width='20'%20stroke-linejoin='round'%20/%3e%3c/g%3e%3c!--%20Graduation%20Cap%20inside%20Shield%20--%3e%3cg%20fill='%23ffffff'%20filter='url(%23shadow)'%3e%3c!--%20Cap%20Diamond%20--%3e%3cpolygon%20points='256,160%20340,200%20256,240%20172,200'%20/%3e%3c!--%20Cap%20Base%20--%3e%3cpath%20d='M200,225%20L200,265%20C200,285%20225,295%20256,295%20C287,295%20312,285%20312,265%20L312,225%20L256,252%20Z'%20/%3e%3c!--%20Tassel%20--%3e%3cpath%20d='M310,210%20L330,245%20L330,285%20C330,290%20327,292%20325,290%20L320,280%20Z'%20/%3e%3c/g%3e%3c!--%20Star%20Embellishments%20--%3e%3cg%20fill='%23a5b4fc'%3e%3cpath%20d='M256,330%20L260,340%20L270,340%20L262,346%20L265,356%20L256,350%20L247,356%20L250,346%20L242,340%20L252,340%20Z'%20/%3e%3cpath%20d='M216,310%20L219,317%20L226,317%20L220,321%20L222,328%20L216,324%20L210,328%20L212,321%20L206,317%20L213,317%20Z'%20/%3e%3cpath%20d='M296,310%20L299,317%20L306,317%20L300,321%20L302,328%20L296,324%20L290,328%20L292,321%20L286,317%20L293,317%20Z'%20/%3e%3c/g%3e%3c/svg%3e" alt="School Data Portal" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);">
         </div>
         <h1 class="login-title">School Portal</h1>
         <p class="login-subtitle">Sign in with your School Account credentials</p>
@@ -52,7 +56,7 @@
         <span id="auth-error-text"></span>
       </div>
 
-      <!-- Login Form -->
+      <!-- Login Form (Simple User ID + Password + Login) -->
       <form id="school-login-form" class="login-form" novalidate>
         <div class="form-group">
           <label for="login-id" class="form-label">Login ID / Email</label>
@@ -67,10 +71,7 @@
         </div>
 
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label for="login-password" class="form-label" style="margin-bottom: 0;">Password</label>
-            <button type="button" id="forgot-password-btn" class="forgot-link">Forgot Password?</button>
-          </div>
+          <label for="login-password" class="form-label">Password</label>
           <div class="password-input-wrapper">
             <input
               type="password"
@@ -101,7 +102,7 @@
           </div>
         </div>
 
-        <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block">
+        <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block" style="margin-top: 8px;">
           <span class="btn-text">Sign In to School Portal</span>
           <span class="btn-spinner"></span>
         </button>

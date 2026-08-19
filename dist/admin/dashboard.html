@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Panel - School Data Portal</title>
   <meta name="description" content="Super Admin Control Panel">
+  <meta name="theme-color" content="#1e3a8a">
+
+  <!-- Favicon & PWA Icons -->
+  <link rel="icon" href="../assets/icon-BOSJock3.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../assets/icon-BOSJock3.svg">
+  <link rel="manifest" href="../assets/manifest-4mMUZuQz.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,9 +29,11 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="../assets/adminDashboard-DN4E5ChZ.js"></script>
-  <link rel="modulepreload" crossorigin href="../assets/firebase-B_iEtlpl.js">
-  <link rel="stylesheet" crossorigin href="../assets/adminDashboard-DBa2xLQa.css">
+  <script type="module" crossorigin src="../assets/adminDashboard-CtgxeEt1.js"></script>
+  <link rel="modulepreload" crossorigin href="../assets/firebase-BaMEv929.js">
+  <link rel="modulepreload" crossorigin href="../assets/session-manager-DIPlyXrz.js">
+  <link rel="modulepreload" crossorigin href="../assets/image-resolver-SOCDdiLn.js">
+  <link rel="stylesheet" crossorigin href="../assets/adminDashboard-B74ZF2EJ.css">
 </head>
 <body>
   <!-- Auth Protection Loader -->
@@ -43,11 +51,8 @@
          ==================================================================== -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <div class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 6h10"></path><path d="M6 10h10"></path>
-          </svg>
+        <div class="brand-icon" style="background: none; border: none; padding: 0;">
+          <img src="data:image/svg+xml,%3csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20512%20512'%20width='100%25'%20height='100%25'%3e%3cdefs%3e%3c!--%20Background%20Gradient%20--%3e%3clinearGradient%20id='bg-grad'%20x1='0%25'%20y1='0%25'%20x2='100%25'%20y2='100%25'%3e%3cstop%20offset='0%25'%20stop-color='%236366f1'%20/%3e%3cstop%20offset='100%25'%20stop-color='%234f46e5'%20/%3e%3c/linearGradient%3e%3c!--%20Shield/Book%20Gradient%20--%3e%3clinearGradient%20id='shield-grad'%20x1='0%25'%20y1='0%25'%20x2='0%25'%20y2='100%25'%3e%3cstop%20offset='0%25'%20stop-color='%23ffffff'%20stop-opacity='0.9'%20/%3e%3cstop%20offset='100%25'%20stop-color='%23ffffff'%20stop-opacity='0.6'%20/%3e%3c/linearGradient%3e%3c!--%20Shadow%20Filter%20--%3e%3cfilter%20id='shadow'%20x='-10%25'%20y='-10%25'%20width='120%25'%20height='120%25'%3e%3cfeDropShadow%20dx='0'%20dy='8'%20stdDeviation='12'%20flood-color='%23090d16'%20flood-opacity='0.3'%20/%3e%3c/filter%3e%3c/defs%3e%3c!--%20Maskable%20Safe%20Area%20/%20Background%20--%3e%3crect%20width='512'%20height='512'%20rx='112'%20fill='url(%23bg-grad)'%20/%3e%3c!--%20Shield%20Shape%20(Symbolizing%20Institution/Security)%20--%3e%3cg%20filter='url(%23shadow)'%3e%3cpath%20d='M256,80%20C310,80%20390,110%20390,110%20C390,110%20390,260%20350,335%20C310,410%20256,432%20256,432%20C256,432%20202,410%20162,335%20C122,260%20122,110%20122,110%20C122,110%20202,80%20256,80%20Z'%20fill='none'%20stroke='url(%23shield-grad)'%20stroke-width='20'%20stroke-linejoin='round'%20/%3e%3c/g%3e%3c!--%20Graduation%20Cap%20inside%20Shield%20--%3e%3cg%20fill='%23ffffff'%20filter='url(%23shadow)'%3e%3c!--%20Cap%20Diamond%20--%3e%3cpolygon%20points='256,160%20340,200%20256,240%20172,200'%20/%3e%3c!--%20Cap%20Base%20--%3e%3cpath%20d='M200,225%20L200,265%20C200,285%20225,295%20256,295%20C287,295%20312,285%20312,265%20L312,225%20L256,252%20Z'%20/%3e%3c!--%20Tassel%20--%3e%3cpath%20d='M310,210%20L330,245%20L330,285%20C330,290%20327,292%20325,290%20L320,280%20Z'%20/%3e%3c/g%3e%3c!--%20Star%20Embellishments%20--%3e%3cg%20fill='%23a5b4fc'%3e%3cpath%20d='M256,330%20L260,340%20L270,340%20L262,346%20L265,356%20L256,350%20L247,356%20L250,346%20L242,340%20L252,340%20Z'%20/%3e%3cpath%20d='M216,310%20L219,317%20L226,317%20L220,321%20L222,328%20L216,324%20L210,328%20L212,321%20L206,317%20L213,317%20Z'%20/%3e%3cpath%20d='M296,310%20L299,317%20L306,317%20L300,321%20L302,328%20L296,324%20L290,328%20L292,321%20L286,317%20L293,317%20Z'%20/%3e%3c/g%3e%3c/svg%3e" alt="School Data Portal" style="width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
         </div>
         <div class="brand-text">
           <h1>Admin Panel</h1>
@@ -126,12 +131,12 @@
             <p>Monitor registered school institutions, authenticated accounts, and real-time device sessions.</p>
           </div>
 
-          <!-- 5 Clean Summary Cards -->
+          <!-- Simplified 4-Card System Overview -->
           <div class="metrics-strip">
             <div class="metric-box">
               <div class="metric-box-title">Total Schools</div>
               <div class="metric-box-number" id="metric-total-schools">0</div>
-              <div class="metric-box-sub">Configured institutions</div>
+              <div class="metric-box-sub">Registered institutions</div>
             </div>
             <div class="metric-box">
               <div class="metric-box-title">Active Schools</div>
@@ -142,11 +147,6 @@
               <div class="metric-box-title">Inactive Schools</div>
               <div class="metric-box-number" id="metric-inactive-schools" style="color: #d97706;">0</div>
               <div class="metric-box-sub">Suspended access</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-box-title">Total Accounts</div>
-              <div class="metric-box-number" id="metric-total-users" style="color: #2563eb;">0</div>
-              <div class="metric-box-sub">Schools & user accounts</div>
             </div>
             <div class="metric-box">
               <div class="metric-box-title">Active Sessions</div>
@@ -162,7 +162,7 @@
               <p class="section-subtitle">Manage registered institutions, authenticated accounts, and student records</p>
             </div>
             <div class="search-filter-box">
-              <input type="text" id="dashboard-search-schools" class="form-input" placeholder="Search school name, ID or UID..." style="max-width: 280px; padding: 6px 12px;">
+              <input type="text" id="dashboard-search-schools" class="form-input" placeholder="Search school name or ID..." style="max-width: 280px; padding: 6px 12px;">
             </div>
           </div>
 
@@ -171,9 +171,8 @@
               <table class="clean-table">
                 <thead>
                   <tr>
-                    <th>School</th>
+                    <th>School Name</th>
                     <th>School ID</th>
-                    <th>Primary School Auth UID</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Sessions</th>
@@ -212,7 +211,6 @@
                   <tr>
                     <th>School Name</th>
                     <th>School ID</th>
-                    <th>Primary School Auth UID</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Devices</th>
@@ -247,11 +245,11 @@
                 <div class="school-header-info">
                   <h2 id="sd-name">School Name</h2>
                   <div class="school-header-meta">
-                    <span id="sd-id" style="font-weight: 700; color: #2563eb;">SCHOOL001</span>
+                    <span id="sd-id" style="font-weight: 700; color: #2563eb; font-family: monospace;">SCHOOL001</span>
                     <span>&bull;</span>
-                    <span class="chip-uid">Primary Auth UID: <span id="sd-firebase-uid">SCH_UID</span></span>
-                    <span>&bull;</span>
-                    <span id="sd-status-badge" class="badge badge-active">Active</span>
+                    <span id="sd-status-badge" class="badge badge-active">School: Active</span>
+                    <span id="sd-login-status-badge" class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Login: Active</span>
+                    <span id="sd-sessions-badge" class="badge" style="background:#f5f3ff; color:#7c3aed; border:1px solid #ddd6fe;">Active Sessions: <span id="sd-header-sessions-count">0</span></span>
                     <span>&bull;</span>
                     <span id="sd-admin-email" style="font-size: 0.8rem; color: #64748b;">admin@school.com</span>
                   </div>
@@ -357,6 +355,14 @@
                   <div class="info-item">
                     <div class="info-label">Campus Address</div>
                     <div class="info-value" id="info-school-address">—</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Configured Class Range</div>
+                    <div class="info-value" id="info-school-class-range" style="font-weight: 700; color: #1e3a8a;">—</div>
+                  </div>
+                  <div class="info-item" id="info-school-subjects-container" style="display: none; grid-column: 1 / -1;">
+                    <div class="info-label">Offered Senior Subjects (Class 11/12)</div>
+                    <div class="info-value" id="info-school-subjects-list" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">—</div>
                   </div>
                   <div class="info-item" style="grid-column: 1 / -1;">
                     <div class="info-label">Logo URL</div>
@@ -473,10 +479,9 @@
               <table class="clean-table">
                 <thead>
                   <tr>
-                    <th>Account Name / Display</th>
+                    <th>Account Name / Email</th>
                     <th>Account Type</th>
-                    <th>Firebase UID</th>
-                    <th>Assigned School ID</th>
+                    <th>Assigned School</th>
                     <th>Status</th>
                     <th>Device Access</th>
                     <th style="text-align: right;">Action</th>
@@ -500,8 +505,16 @@
               <h2 class="section-title">Live Connected Device Sessions</h2>
               <p class="section-subtitle">Real-time session monitor across all schools and users</p>
             </div>
-            <div style="font-size: 0.85rem; font-weight: 600; color: #7c3aed; background: #f5f3ff; border: 1px solid #ddd6fe; padding: 4px 12px; border-radius: 9999px;">
-              <span id="sessions-total-count">0</span> Active Sessions Connected
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="sessions-school-filter" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Filter School:</label>
+                <select id="sessions-school-filter" class="form-input" style="padding: 6px 12px; min-width: 200px; font-weight: 600; color: var(--text-main);">
+                  <option value="all">All Schools (All Active)</option>
+                </select>
+              </div>
+              <div style="font-size: 0.85rem; font-weight: 600; color: #7c3aed; background: #f5f3ff; border: 1px solid #ddd6fe; padding: 6px 14px; border-radius: 9999px;">
+                <span id="sessions-total-count">0</span> Active Sessions Connected
+              </div>
             </div>
           </div>
 
@@ -511,8 +524,8 @@
                 <thead>
                   <tr>
                     <th>School</th>
-                    <th>Account / User UID</th>
-                    <th>Device Name</th>
+                    <th>User Account</th>
+                    <th>Device / Browser</th>
                     <th>Device ID</th>
                     <th>Login Time</th>
                     <th>Last Active</th>
@@ -736,6 +749,67 @@
             </div>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="acc-school-start-class">Starting Class *</label>
+              <select id="acc-school-start-class" class="form-select" required>
+                <option value="">-- Select Starting Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1" selected>Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10">Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="acc-school-end-class">Ending Class *</label>
+              <select id="acc-school-end-class" class="form-select" required>
+                <option value="">-- Select Ending Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1">Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10" selected>Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Subject Configuration Section for Class 11 / 12 -->
+          <div id="acc-school-subjects-section" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 14px;">
+            <div style="font-size: 0.825rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+              <span>School Subjects (Class 11 & 12)</span>
+              <span class="badge badge-active" style="font-size: 0.65rem;">Senior Classes Included</span>
+            </div>
+            <div style="font-size: 0.725rem; color: var(--text-muted); margin-bottom: 8px;">Select or customize the subjects offered by this school.</div>
+            <div id="acc-school-subjects-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin-bottom: 10px;">
+              <!-- Subject checkboxes dynamically rendered -->
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="acc-school-custom-subject" class="form-input" placeholder="Add custom subject..." style="font-size: 0.775rem; padding: 5px 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="acc-school-add-subject-btn" style="white-space: nowrap; font-size: 0.75rem; padding: 5px 10px;">+ Add</button>
+            </div>
+          </div>
+
           <div style="margin-top: 6px; margin-bottom: 16px;">
             <label class="form-label">School Account Permissions</label>
             <div class="toggle-row">
@@ -924,6 +998,66 @@
               <input type="text" id="edit-school-address" class="form-input" placeholder="City, State">
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="edit-school-start-class">Starting Class *</label>
+              <select id="edit-school-start-class" class="form-select" required>
+                <option value="">-- Select Starting Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1">Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10">Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-school-end-class">Ending Class *</label>
+              <select id="edit-school-end-class" class="form-select" required>
+                <option value="">-- Select Ending Class --</option>
+                <option value="Nursery">Nursery</option>
+                <option value="KG 1">KG 1 / LKG</option>
+                <option value="KG 2">KG 2 / UKG</option>
+                <option value="Class 1">Class 1</option>
+                <option value="Class 2">Class 2</option>
+                <option value="Class 3">Class 3</option>
+                <option value="Class 4">Class 4</option>
+                <option value="Class 5">Class 5</option>
+                <option value="Class 6">Class 6</option>
+                <option value="Class 7">Class 7</option>
+                <option value="Class 8">Class 8</option>
+                <option value="Class 9">Class 9</option>
+                <option value="Class 10">Class 10</option>
+                <option value="Class 11">Class 11</option>
+                <option value="Class 12">Class 12</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Subject Configuration Section for Class 11 / 12 -->
+          <div id="edit-school-subjects-section" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 14px;">
+            <div style="font-size: 0.825rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+              <span>School Subjects (Class 11 & 12)</span>
+              <span class="badge badge-active" style="font-size: 0.65rem;">Senior Classes Included</span>
+            </div>
+            <div style="font-size: 0.725rem; color: var(--text-muted); margin-bottom: 8px;">Select or customize the subjects offered by this school.</div>
+            <div id="edit-school-subjects-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin-bottom: 10px;">
+              <!-- Subject checkboxes dynamically rendered -->
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="text" id="edit-school-custom-subject" class="form-input" placeholder="Add custom subject..." style="font-size: 0.775rem; padding: 5px 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="edit-school-add-subject-btn" style="white-space: nowrap; font-size: 0.75rem; padding: 5px 10px;">+ Add</button>
+            </div>
+          </div>
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
             <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-edit-school')">Cancel</button>
             <button type="submit" class="btn btn-primary">Update School</button>
@@ -1019,6 +1153,16 @@
             </label>
           </div>
         </div>
+
+        <!-- User Level Active Sessions -->
+        <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <label class="form-label" style="margin-bottom: 0;">Connected Device Sessions (<span id="m-user-sessions-count">0</span> Active)</label>
+          </div>
+          <div id="m-user-sessions-list" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-edit-user-perms')">Cancel</button>
@@ -1046,6 +1190,29 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-delete-school')">Cancel</button>
         <button type="button" class="btn btn-danger" id="confirm-delete-school-btn">Permanently Delete</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Modal 5: Two-Step Confirmation for School Deactivation -->
+  <div id="modal-confirm-deactivate-school" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header" style="background: #fffbeb; border-bottom-color: #fde68a;">
+        <h3 class="modal-title" style="color: #b45309;">Deactivate School?</h3>
+        <button class="modal-close" onclick="window.closeModal('modal-confirm-deactivate-school')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 8px;">
+          Are you sure you want to deactivate <span id="deact-school-name" style="font-weight: 800; color: #b45309;"></span>?
+        </p>
+        <p style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px;">
+          Deactivating this school will immediately suspend institutional access and <strong>terminate all active user sessions</strong> connected under this school.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-confirm-deactivate-school')">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-deactivate-school-btn">Confirm Deactivate</button>
       </div>
     </div>
   </div>

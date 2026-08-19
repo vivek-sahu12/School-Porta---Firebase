@@ -2,9 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>School Portal Login - School Data Portal</title>
   <meta name="description" content="School Portal Authentication">
+  <meta name="theme-color" content="#4f46e5">
+
+  <!-- Favicon & PWA Icons -->
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,13 +33,10 @@
 <body class="login-page">
   <div class="login-wrapper">
     <div class="login-card">
-      <!-- Header -->
+      <!-- Header with Application Logo -->
       <div class="login-header">
-        <div class="school-brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 6h10"></path><path d="M6 10h10"></path>
-          </svg>
+        <div style="display: flex; justify-content: center; margin-bottom: 8px;">
+          <img src="./icon.svg" alt="School Data Portal" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);">
         </div>
         <h1 class="login-title">School Portal</h1>
         <p class="login-subtitle">Sign in with your School Account credentials</p>
@@ -49,7 +52,7 @@
         <span id="auth-error-text"></span>
       </div>
 
-      <!-- Login Form -->
+      <!-- Login Form (Simple User ID + Password + Login) -->
       <form id="school-login-form" class="login-form" novalidate>
         <div class="form-group">
           <label for="login-id" class="form-label">Login ID / Email</label>
@@ -64,10 +67,7 @@
         </div>
 
         <div class="form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label for="login-password" class="form-label" style="margin-bottom: 0;">Password</label>
-            <button type="button" id="forgot-password-btn" class="forgot-link">Forgot Password?</button>
-          </div>
+          <label for="login-password" class="form-label">Password</label>
           <div class="password-input-wrapper">
             <input
               type="password"
@@ -98,7 +98,7 @@
           </div>
         </div>
 
-        <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block">
+        <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block" style="margin-top: 8px;">
           <span class="btn-text">Sign In to School Portal</span>
           <span class="btn-spinner"></span>
         </button>

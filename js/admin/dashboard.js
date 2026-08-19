@@ -1,4 +1,11 @@
 import { auth, signOut, onAuthStateChanged } from "../firebase.js";
+import {
+  initInactivityTracker,
+  stopInactivityTracker,
+  initNetworkMonitor,
+  performExplicitLogout,
+  performForcedLogout
+} from "../session-manager.js";
 import { initSuperAdminUI, showToast, closeModal } from "./superadmin-ui.js";
 
 // Super Admin UID access-control constant (Admin Panel ONLY)
@@ -14,6 +21,14 @@ const sidebarUserEmail = document.getElementById("sidebar-user-email");
 const userAvatarInitial = document.getElementById("user-avatar-initial");
 const sidebarUserAvatar = document.getElementById("sidebar-user-avatar");
 const logoutBtn = document.getElementById("logout-btn");
+
+// Initialize Network & Inactivity Monitoring
+initInactivityTracker((reason) => {
+  console.warn("Super Admin 24-hour inactivity timeout fired:", reason);
+  performForcedLogout(reason, "./index.html");
+});
+
+initNetworkMonitor();
 
 /**
  * 1. Single Authentication State Listener with Super Admin UID Guard
@@ -65,24 +80,22 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+// Failsafe loader hide
+setTimeout(() => {
+  if (pageLoader && !pageLoader.classList.contains("hidden") && auth.currentUser) {
+    pageLoader.classList.add("hidden");
+  }
+}, 3000);
+
 /**
  * 2. Explicit Manual Logout Handler
  */
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
-    try {
-      if (pageLoader) {
-        pageLoader.classList.remove("hidden");
-      }
-      await signOut(auth);
-      window.location.replace("./index.html");
-    } catch (error) {
-      console.error("Logout Error:", error);
-      if (pageLoader) {
-        pageLoader.classList.add("hidden");
-      }
-      showToast("An error occurred while signing out. Please try again.", "error");
+    if (pageLoader) {
+      pageLoader.classList.remove("hidden");
     }
+    await performExplicitLogout("./index.html");
   });
 }
 

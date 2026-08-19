@@ -68,9 +68,33 @@ function setLoading(isLoading) {
   }
 }
 
+// 0. Check for forced logout / inactivity messages on load
+document.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  const reason = params.get("reason");
+  const storedReason = sessionStorage.getItem("forced_logout_reason");
+
+  if (storedReason) {
+    showError(storedReason);
+    sessionStorage.removeItem("forced_logout_reason");
+  } else if (reason === "inactivity") {
+    showError("Your session expired due to 24 hours of inactivity. Please sign in again.");
+  } else if (reason === "force_logout") {
+    showError("Your session was ended.");
+  }
+});
+
 // 1. Listen for existing authenticated session (Single Listener)
 onAuthStateChanged(auth, (user) => {
   if (user && user.uid === SUPER_ADMIN_UID) {
+    // Check if session has expired due to 24h inactivity
+    const lastActive = localStorage.getItem("portal_last_activity");
+    if (lastActive && (Date.now() - Number(lastActive) >= 24 * 60 * 60 * 1000)) {
+      console.warn("Super Admin session expired due to inactivity.");
+      signOut(auth);
+      showError("Your session expired due to 24 hours of inactivity. Please sign in again.");
+      return;
+    }
     // Already authenticated as Super Admin -> redirect immediately to Dashboard
     window.location.replace("./dashboard.html");
   }
@@ -135,6 +159,7 @@ if (loginForm) {
       if (user) {
         if (user.uid === SUPER_ADMIN_UID) {
           // Authorized Super Admin
+          localStorage.setItem("portal_last_activity", String(Date.now()));
           window.location.replace("./dashboard.html");
         } else {
           // Deny access if authenticated UID does not match Super Admin UID

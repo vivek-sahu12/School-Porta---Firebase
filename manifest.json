@@ -1,0 +1,17 @@
+{
+  "name": "School Data Portal",
+  "short_name": "SchoolPortal",
+  "description": "Unified Offline-First School Data Portal and Administration System",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

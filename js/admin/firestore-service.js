@@ -94,11 +94,11 @@ export function subscribeToUsers(onData, onError) {
 }
 
 /**
- * Subscribe to Active Sessions
+ * Subscribe to Active Sessions (ONLY currently active sessions)
  */
 export function subscribeToSessions(onData, onError) {
   try {
-    const q = query(sessionsCol, where("status", "==", "active"), limit(100));
+    const q = query(sessionsCol, where("status", "==", "active"));
     return onSnapshot(q, (snapshot) => {
       const sessions = snapshot.docs.map((d) => {
         const data = d.data();
@@ -114,6 +114,12 @@ export function subscribeToSessions(onData, onError) {
             : "Now"
         };
       });
+      // Sort in-memory by loginTime descending
+      sessions.sort((a, b) => {
+        const tA = a.loginTime?.toDate ? a.loginTime.toDate().getTime() : 0;
+        const tB = b.loginTime?.toDate ? b.loginTime.toDate().getTime() : 0;
+        return tB - tA;
+      });
       onData(sessions);
     }, (error) => {
       console.warn("Sessions listener error:", error);
@@ -127,11 +133,11 @@ export function subscribeToSessions(onData, onError) {
 }
 
 /**
- * Subscribe to Real-Time Admin Activity / Audit Logs
+ * Subscribe to Admin Activity Logs
  */
 export function subscribeToAdminLogs(onData, onError) {
   try {
-    const q = query(adminLogsCol, orderBy("timestamp", "desc"), limit(50));
+    const q = query(adminLogsCol, orderBy("timestamp", "desc"), limit(100));
     return onSnapshot(q, (snapshot) => {
       const logs = snapshot.docs.map((d) => {
         const data = d.data();
@@ -139,8 +145,8 @@ export function subscribeToAdminLogs(onData, onError) {
           id: d.id,
           ...data,
           formattedTime: data.timestamp?.toDate 
-            ? data.timestamp.toDate().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) 
-            : "Just now"
+            ? data.timestamp.toDate().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) 
+            : "Recently"
         };
       });
       onData(logs);
@@ -156,16 +162,17 @@ export function subscribeToAdminLogs(onData, onError) {
 }
 
 /**
- * Log Meaningful Administrative Actions to Firestore
+ * Record an audit log entry
  */
-export async function logAdminAction({ action, target, details = "", adminEmail = "Super Admin" }) {
+export async function logAdminAction({ action, target, details }) {
   try {
-    const logDocRef = doc(adminLogsCol);
-    await setDoc(logDocRef, {
-      action,
-      target,
-      details,
-      admin: adminEmail || auth.currentUser?.email || "Super Admin",
+    const adminUser = auth.currentUser;
+    await setDoc(doc(adminLogsCol), {
+      action: action || "Admin Action",
+      target: target || "System",
+      details: details || "Success",
+      admin: adminUser?.email || "Super Admin",
+      adminUid: adminUser?.uid || SUPER_ADMIN_UID,
       timestamp: serverTimestamp()
     });
   } catch (err) {
@@ -175,29 +182,36 @@ export async function logAdminAction({ action, target, details = "", adminEmail 
 
 /**
  * ============================================================================
- * 2. LEVEL 2: PRIMARY SCHOOL ACCOUNT (Authenticated Account + School Record)
+ * 2. LEVEL 2: SCHOOLS CRUD OPERATIONS
  * ============================================================================
  */
 
 /**
- * Register / Configure an Existing School Account (Creates School entity + Primary School Account document)
+ * Save / Enroll a School and its Primary Authentication Account
  */
-export async function saveSchoolAccount({
+export async function saveSchoolWithAccount({
   schoolId,
-  firebaseUid,
   schoolName,
+  firebaseUid = "",
+  adminEmail = "",
   logoUrl = "",
   address = "",
-  adminEmail = "",
   status = "Active",
+  startingClass = "Nursery",
+  endingClass = "Class 10",
+  subjects = [],
   deviceLimit = 3,
   permissions = {}
 }) {
   const cleanSchoolId = schoolId.trim().toUpperCase();
   const cleanSchoolName = schoolName.trim();
-  const cleanFirebaseUid = (firebaseUid || "").trim();
-  const cleanLogoUrl = logoUrl ? logoUrl.trim() : "";
+  const cleanFirebaseUid = firebaseUid ? firebaseUid.trim() : "";
   const cleanEmail = adminEmail ? adminEmail.trim().toLowerCase() : "";
+  const cleanLogoUrl = logoUrl ? logoUrl.trim() : "";
+
+  if (!cleanSchoolId || !cleanSchoolName) {
+    throw new Error("School ID and School Name are required.");
+  }
 
   // 1. Write School Entity Record (schools/SCHOOL001)
   const schoolDocRef = doc(db, "schools", cleanSchoolId);
@@ -213,6 +227,9 @@ export async function saveSchoolAccount({
     status: status || "Active",
     address: address ? address.trim() : "Campus Address",
     adminEmail: cleanEmail,
+    startingClass: startingClass || "Nursery",
+    endingClass: endingClass || "Class 10",
+    subjects: Array.isArray(subjects) ? subjects : [],
     usersCount: existingSchoolDoc.exists() ? (existingSchoolDoc.data().usersCount || 0) : 0,
     updatedAt: serverTimestamp()
   };
@@ -260,7 +277,7 @@ export async function saveSchoolAccount({
   await logAdminAction({
     action: existingSchoolDoc.exists() ? "School Account Updated" : "School Account Configured",
     target: `${cleanSchoolName} (${cleanSchoolId})`,
-    details: `Auth UID: ${cleanFirebaseUid || 'None'}, Status: ${status}, Device Limit: ${deviceLimit}`
+    details: `Status: ${status}, Device Limit: ${deviceLimit}`
   });
 
   return { id: cleanSchoolId, ...schoolData };
@@ -282,6 +299,54 @@ export async function updateSchool(schoolId, updateData) {
     target: `School ID: ${cleanSchoolId}`,
     details: updateData.schoolName ? `Name: ${updateData.schoolName}` : "Info updated"
   });
+}
+
+/**
+ * Terminate all active sessions belonging to a specific school
+ */
+export async function terminateSchoolSessions(schoolId) {
+  try {
+    const cleanSchoolId = (schoolId || "").trim().toUpperCase();
+    if (!cleanSchoolId) return;
+    const q = query(sessionsCol, where("schoolId", "==", cleanSchoolId), where("status", "==", "active"));
+    const snap = await getDocs(q);
+    const updates = [];
+    snap.forEach((d) => {
+      updates.push(updateDoc(d.ref, {
+        status: "terminated",
+        logoutTime: serverTimestamp()
+      }));
+    });
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+  } catch (err) {
+    console.warn("Error terminating school sessions:", err);
+  }
+}
+
+/**
+ * Terminate all active sessions belonging to a specific user
+ */
+export async function terminateUserSessions(userUid) {
+  try {
+    const cleanUid = (userUid || "").trim();
+    if (!cleanUid) return;
+    const q = query(sessionsCol, where("userUid", "==", cleanUid), where("status", "==", "active"));
+    const snap = await getDocs(q);
+    const updates = [];
+    snap.forEach((d) => {
+      updates.push(updateDoc(d.ref, {
+        status: "terminated",
+        logoutTime: serverTimestamp()
+      }));
+    });
+    if (updates.length > 0) {
+      await Promise.all(updates);
+    }
+  } catch (err) {
+    console.warn("Error terminating user sessions:", err);
+  }
 }
 
 /**
@@ -311,10 +376,15 @@ export async function toggleSchoolStatus(schoolId, currentStatus, firebaseUid = 
     }
   }
 
+  // If deactivating, terminate all active sessions for this school immediately
+  if (newStatus === "Inactive") {
+    await terminateSchoolSessions(cleanSchoolId);
+  }
+
   await logAdminAction({
     action: newStatus === "Active" ? "School Activated" : "School Deactivated",
     target: `School ID: ${cleanSchoolId}`,
-    details: `Status: ${currentStatus} → ${newStatus}`
+    details: `Status changed: ${currentStatus} -> ${newStatus}${newStatus === "Inactive" ? " (All active sessions revoked)" : ""}`
   });
 
   return newStatus;
@@ -346,7 +416,7 @@ export async function permanentlyDeleteSchool(schoolId, firebaseUid = "") {
 
 /**
  * ============================================================================
- * 3. LEVEL 3: SCHOOL USERS (Additional Authenticated Accounts belonging to School)
+ * 3. LEVEL 3: SCHOOL USERS (Additional Accounts belonging to School)
  * ============================================================================
  */
 
@@ -413,10 +483,15 @@ export async function saveUserAccount({
 
   await setDoc(userDocRef, userData, { merge: true });
 
+  // If user is deactivated, immediately terminate all active sessions for this user
+  if (status === "Inactive") {
+    await terminateUserSessions(cleanUid);
+  }
+
   await logAdminAction({
     action: existingDoc.exists() ? "Account Settings Updated" : (type === "school" ? "School Account Saved" : "User Configured"),
-    target: `${cleanName} (${cleanUid})`,
-    details: `Type: ${type}, School: ${cleanSchoolId}, Device Limit: ${userData.deviceLimit}, Status: ${status}`
+    target: `${cleanName} (${cleanSchoolId})`,
+    details: `Type: ${type}, School: ${cleanSchoolId}, Device Limit: ${userData.deviceLimit}, Status: ${status}${status === "Inactive" ? " (All active sessions revoked)" : ""}`
   });
 
   return { id: cleanUid, ...userData };
@@ -424,7 +499,7 @@ export async function saveUserAccount({
 
 /**
  * ============================================================================
- * 4. ACTIVE SESSIONS & FORCE LOGOUT
+ * 4. ACTIVE SESSIONS, FORCE LOGOUT & RETENTION CLEANUP
  * ============================================================================
  */
 
@@ -444,7 +519,132 @@ export async function terminateSession(sessionId) {
       target: `Session: ${sessionId}`,
       details: "Session marked as terminated"
     });
+    return { success: true };
   } catch (err) {
-    console.warn("Terminate session error:", err);
+    console.error("Terminate session error:", err);
+    throw err;
   }
 }
+
+/**
+ * Enforce Per-User Session Retention Rule:
+ * Strictly retains the newest 3 session records for this specific user.
+ * Physically deletes all 4th and older session documents from Cloud Firestore.
+ * Scoped strictly to userUid (User A's sessions never touch User B's).
+ */
+export async function enforceUserSessionRetention(userUid, maxToKeep = 3) {
+  if (!userUid) return;
+  try {
+    const cleanUid = userUid.trim();
+    const q = query(sessionsCol, where("userUid", "==", cleanUid));
+    const snap = await getDocs(q);
+
+    if (snap.size <= maxToKeep) return;
+
+    const userSessions = snap.docs.map((d) => {
+      const data = d.data();
+      let time = 0;
+      if (data.loginTime?.toDate) {
+        time = data.loginTime.toDate().getTime();
+      } else if (data.loginTime?._seconds) {
+        time = data.loginTime._seconds * 1000;
+      } else if (typeof data.loginTime === "number") {
+        time = data.loginTime;
+      }
+      return { id: d.id, ref: d.ref, time };
+    });
+
+    // Sort descending by loginTime (newest first)
+    userSessions.sort((a, b) => b.time - a.time);
+
+    // Keep top 3 (indices 0, 1, 2); delete 4th and older (indices >= 3)
+    const toDelete = userSessions.slice(maxToKeep);
+    if (toDelete.length > 0) {
+      const deletePromises = toDelete.map((item) => deleteDoc(item.ref));
+      await Promise.all(deletePromises);
+      console.log(`Physically purged ${toDelete.length} obsolete session document(s) for user ${cleanUid}.`);
+    }
+  } catch (err) {
+    console.warn("Session retention cleanup warning:", err);
+  }
+}
+
+/**
+ * Fetch retained recent session history for a specific user (maximum 3 records)
+ */
+export async function getUserSessionHistory(userUid, max = 3) {
+  if (!userUid) return [];
+  try {
+    const cleanUid = userUid.trim();
+    const q = query(sessionsCol, where("userUid", "==", cleanUid));
+    const snap = await getDocs(q);
+
+    const sessions = snap.docs.map((d) => {
+      const data = d.data();
+      let time = 0;
+      if (data.loginTime?.toDate) {
+        time = data.loginTime.toDate().getTime();
+      } else if (data.loginTime?._seconds) {
+        time = data.loginTime._seconds * 1000;
+      }
+      return {
+        id: d.id,
+        sessionId: data.sessionId || d.id,
+        ...data,
+        timestamp: time,
+        formattedLoginTime: data.loginTime?.toDate 
+          ? data.loginTime.toDate().toLocaleString([], { dateStyle: "short", timeStyle: "short" }) 
+          : "Recently",
+        formattedLastActive: data.lastActive?.toDate 
+          ? data.lastActive.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) 
+          : "Now"
+      };
+    });
+
+    sessions.sort((a, b) => b.timestamp - a.timestamp);
+    return sessions.slice(0, max);
+  } catch (err) {
+    console.warn("Error fetching user session history:", err);
+    return [];
+  }
+}
+
+/**
+ * Clean up old session records older than 48 hours (1-2 days target retention)
+ */
+export async function cleanupOldSessions() {
+  try {
+    const twoDaysAgo = new Date(Date.now() - (48 * 60 * 60 * 1000));
+    const oldSessionsSnap = await getDocs(sessionsCol);
+
+    let deletedCount = 0;
+    const deletePromises = [];
+
+    oldSessionsSnap.forEach((d) => {
+      const data = d.data();
+      const loginDate = data.loginTime?.toDate ? data.loginTime.toDate() : null;
+      const logoutDate = data.logoutTime?.toDate ? data.logoutTime.toDate() : null;
+      const lastActiveDate = data.lastActive?.toDate ? data.lastActive.toDate() : null;
+
+      const isOld = (loginDate && loginDate < twoDaysAgo) || 
+                    (logoutDate && logoutDate < twoDaysAgo) ||
+                    (lastActiveDate && lastActiveDate < twoDaysAgo);
+
+      const isTerminated = data.status === "terminated" || data.status === "logged_out";
+
+      if (isOld || (isTerminated && logoutDate && logoutDate < twoDaysAgo)) {
+        deletePromises.push(deleteDoc(d.ref));
+        deletedCount++;
+      }
+    });
+
+    if (deletePromises.length > 0) {
+      await Promise.all(deletePromises);
+      console.log(`Cleaned up ${deletedCount} expired session records (older than 48h).`);
+    }
+  } catch (err) {
+    console.warn("Session cleanup routine error:", err);
+  }
+}
+
+export const saveSchoolAccount = saveSchoolWithAccount;
