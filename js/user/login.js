@@ -148,7 +148,7 @@ onAuthStateChanged(auth, async (user) => {
             status: "expired",
             logoutTime: serverTimestamp()
           });
-        } catch (e) {}
+        } catch (e) { }
       }
       localStorage.removeItem("current_session_id");
       localStorage.removeItem("portal_last_activity");
@@ -197,7 +197,7 @@ if (togglePasswordBtn && passwordInput) {
   togglePasswordBtn.addEventListener("click", () => {
     const isPassword = passwordInput.type === "password";
     passwordInput.type = isPassword ? "text" : "password";
-    
+
     if (isPassword) {
       if (eyeIconShow) eyeIconShow.style.display = "none";
       if (eyeIconHide) eyeIconHide.style.display = "block";

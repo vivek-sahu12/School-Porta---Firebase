@@ -310,7 +310,7 @@ function setupSchoolNavigation() {
         navigateSchoolPortal(prevState, { fromHistory: true });
       } else {
         // Safe fallback to dashboard (NEVER logout or jump to login!)
-        navigateSchoolPortal({ view: "dashboard", dataset: activeDataset }, { fromHistory: true });
+        navigateSchoolPortal({ view: "dashboard", dataset: DATASET_KEYS.SCHOOL_DATA }, { fromHistory: true });
       }
     });
 
@@ -318,7 +318,11 @@ function setupSchoolNavigation() {
   }
 
   window.navigateSchoolView = (viewName) => {
-    navigateSchoolPortal({ view: viewName, dataset: activeDataset });
+    if (viewName === "dashboard") {
+      navigateSchoolPortal({ view: "dashboard", dataset: DATASET_KEYS.SCHOOL_DATA });
+    } else {
+      navigateSchoolPortal({ view: viewName, dataset: activeDataset });
+    }
   };
 
   const navLinks = document.querySelectorAll(".nav-link");
@@ -331,6 +335,8 @@ function setupSchoolNavigation() {
       if (datasetKey) {
         switchDataset(datasetKey);
         openStudentListView({ title: `All Records (${DATASET_LABELS[datasetKey] || datasetKey})` });
+      } else if (targetView === "dashboard") {
+        navigateSchoolPortal({ view: "dashboard", dataset: DATASET_KEYS.SCHOOL_DATA });
       } else if (targetView) {
         navigateSchoolPortal({ view: targetView, dataset: activeDataset });
       }
@@ -349,13 +355,13 @@ export function handlePortalBack() {
     if (currentPortalState.view === "student-detail") {
       navigateSchoolPortal({
         view: "student-list",
-        dataset: activeDataset,
+        dataset: currentPortalState.dataset || activeDataset,
         filters: { ...activeStudentListFilters }
       }, { replace: true });
     } else {
       navigateSchoolPortal({
         view: "dashboard",
-        dataset: activeDataset
+        dataset: DATASET_KEYS.SCHOOL_DATA
       }, { replace: true });
     }
   }
@@ -1699,6 +1705,14 @@ function setupExcelExport() {
 function switchDataset(datasetKey) {
   if (!DATASET_LABELS[datasetKey]) return;
   activeDataset = datasetKey;
+  if (currentPortalState) {
+    currentPortalState.dataset = datasetKey;
+    try {
+      history.replaceState({ portalState: { ...currentPortalState } }, "", window.location.href);
+    } catch (e) {
+      console.warn("History replaceState note:", e);
+    }
+  }
   renderDatasetDashboard();
 }
 

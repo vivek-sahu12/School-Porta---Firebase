@@ -1,9 +1,13 @@
 // Progressive Web App Service Worker for School Data Portal & Admin Panel
 // Provides network caching, offline support, and fulfills PWA installability requirements
 
-const CACHE_NAME = "school-data-portal-v2";
+const CACHE_NAME = "school-data-portal-v3";
 const PRECACHE_URLS = [
-  "./icon.svg"
+  "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./icon-maskable-192.png",
+  "./icon-maskable-512.png"
 ];
 
 // Install Event

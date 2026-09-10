@@ -1673,7 +1673,10 @@ input:checked + .slider::before {
 
 .student-view-container {
   max-width: 900px;
+  width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .view-navigation-header {
@@ -2327,21 +2330,24 @@ input:checked + .slider::before {
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  padding: 18px 20px;
+  padding: 16px 18px;
   margin-bottom: 16px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .student-avatar-lg {
-  width: 56px;
-  height: 56px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: #ffffff;
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -2353,47 +2359,56 @@ input:checked + .slider::before {
 .student-profile-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 .student-profile-name {
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
   line-height: 1.25;
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 2x2 Clean Grid on Mobile, Natural Flex Wrap on Desktop */
+/* Fluid responsive flex-wrap layout preventing any mobile clipping or container distortion */
 .student-profile-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
   width: 100%;
-  max-width: 320px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .student-profile-meta .meta-pill {
   width: auto !important;
+  max-width: 100%;
   min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: 9999px;
   font-size: 0.775rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   box-sizing: border-box;
+  flex: 0 0 auto;
 }
 
 .student-profile-meta .class-pill {
   background: #eff6ff;
   color: #1d4ed8;
   border: 1px solid #bfdbfe;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .student-profile-meta .gender-pill {
@@ -2414,12 +2429,26 @@ input:checked + .slider::before {
   border: 1px solid #bbf7d0;
 }
 
-@media (min-width: 641px) {
+@media (max-width: 380px) {
+  .student-profile-hero {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .student-avatar-lg {
+    width: 46px;
+    height: 46px;
+    font-size: 1.15rem;
+  }
+  .student-profile-name {
+    font-size: 1.05rem;
+    margin-bottom: 4px;
+  }
   .student-profile-meta {
-    display: flex;
-    flex-wrap: wrap;
-    max-width: none;
-    gap: 8px;
+    gap: 4px 6px;
+  }
+  .student-profile-meta .meta-pill {
+    padding: 3px 8px;
+    font-size: 0.725rem;
   }
 }
 
