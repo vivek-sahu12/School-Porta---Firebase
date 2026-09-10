@@ -9,7 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "firebase": "^10.12.2"
+    "firebase": "^10.12.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "vite": "^5.3.1"

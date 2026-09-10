@@ -151,6 +151,36 @@ onAuthStateChanged(auth, async (user) => {
       return;
     }
 
+    // Verify account existence and active status in Firestore
+    if (navigator.onLine) {
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (!userDocSnap.exists()) {
+          console.warn("Persistent session check: User account document deleted.");
+          localStorage.removeItem("current_session_id");
+          localStorage.removeItem("current_school_id");
+          localStorage.removeItem("portal_last_activity");
+          await signOut(auth);
+          showError("Your account has been deleted by an administrator.");
+          return;
+        }
+
+        const userData = userDocSnap.data();
+        if (userData.status === "Inactive" || userData.status === "Deleted") {
+          console.warn("Persistent session check: User account inactive or deleted.");
+          localStorage.removeItem("current_session_id");
+          localStorage.removeItem("current_school_id");
+          localStorage.removeItem("portal_last_activity");
+          await signOut(auth);
+          showError("Your account has been deactivated or deleted by an administrator.");
+          return;
+        }
+      } catch (checkErr) {
+        console.warn("Login auth state verification note:", checkErr);
+      }
+    }
+
     // User is persistently authenticated -> navigate to dashboard
     window.location.replace("./dashboard.html");
   }
@@ -222,9 +252,9 @@ if (loginForm) {
       }
 
       // Verify Account Status
-      if (userData.status === "Inactive") {
+      if (userData.status === "Inactive" || userData.status === "Deleted") {
         await signOut(auth);
-        showError("Your school account has been deactivated. Access suspended.");
+        showError("Your school account has been deactivated or deleted. Access suspended.");
         setLoading(false);
         return;
       }

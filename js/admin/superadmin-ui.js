@@ -9,13 +9,22 @@ import {
   toggleSchoolStatus as firestoreToggleSchoolStatus,
   permanentlyDeleteSchool,
   saveUserAccount,
+  deleteUserAccount,
   terminateSession,
   terminateSchoolSessions,
   terminateUserSessions,
   getUserSessionHistory,
   enforceUserSessionRetention,
-  cleanupOldSessions
+  cleanupOldSessions,
+  uploadSchoolDataset,
+  getSchoolDatasetSummaries
 } from "./firestore-service.js";
+import {
+  parseAndValidateExcel,
+  DATASET_KEYS,
+  DATASET_LABELS,
+  DATASET_SCHEMAS
+} from "./excel-parser.js";
 import {
   CANONICAL_CLASSES,
   STANDARD_SENIOR_SUBJECTS,
@@ -39,6 +48,12 @@ let currentSchoolTab = "account";
 let currentSettingsTab = "admin-profile";
 let selectedSessionsSchoolFilter = "all";
 let schoolToDeactivateId = null;
+let userPendingDeleteUid = null;
+let deleteUserStep = 1;
+let currentUploadDataset = DATASET_KEYS.SCHOOL_DATA;
+let selectedExcelFile = null;
+let parsedStudentData = null;
+let isUploadingDataset = false;
 
 // Unsubscribe handles
 let unsubSchools = null;
@@ -314,8 +329,19 @@ function setupNavigation() {
       populateAdminProfile();
     }
 
+    // Close sidebar drawer on navigation
     const sidebar = document.getElementById("sidebar");
     if (sidebar) sidebar.classList.remove("open");
+
+    // Sync mobile bottom nav active state
+    const bottomNavItems = document.querySelectorAll(".bottom-nav-item");
+    bottomNavItems.forEach((item) => {
+      if (item.getAttribute("data-view") === viewName) item.classList.add("active");
+      else item.classList.remove("active");
+    });
+
+    // Scroll to top on view change
+    window.scrollTo(0, 0);
   };
 
   navLinks.forEach((link) => {
@@ -347,6 +373,10 @@ window.switchSchoolTab = (tabName) => {
     if (p.id === `school-tab-${tabName}`) p.classList.add("active");
     else p.classList.remove("active");
   });
+
+  if (tabName === "student-data" && selectedSchool) {
+    updateStudentUploadModule(selectedSchool);
+  }
 };
 
 /**
@@ -381,12 +411,23 @@ function updateMetrics() {
   const authActiveSessions = getAuthoritativeActiveSessions();
   const activeSessionsCount = authActiveSessions.length;
 
+  // Real data metrics across active institutions
+  const totalStudents = liveSchools.reduce((acc, s) => acc + (Number(s.studentsCount) || 0), 0);
+  const activeUsers = liveUsers.filter((u) => u.status === "Active").length;
+  const pendingActions = inactiveSchools + liveUsers.filter((u) => u.status === "Inactive").length;
+
   const setVal = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = val;
+    if (el) el.textContent = (typeof val === "number" ? val.toLocaleString() : val);
   };
 
+  // Modern Mobile System Overview Metrics
   setVal("metric-total-schools", totalSchools);
+  setVal("metric-total-students", totalStudents);
+  setVal("metric-active-users", activeUsers);
+  setVal("metric-pending-actions", pendingActions);
+
+  // Legacy/Secondary element fallbacks
   setVal("metric-active-schools", activeSchools);
   setVal("metric-inactive-schools", inactiveSchools);
   setVal("metric-active-sessions", activeSessionsCount);
@@ -407,7 +448,7 @@ function renderDashboardSchools(filteredList = null) {
   if (list.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="8">
           <div class="empty-box">
             <svg class="empty-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
             <h3>No schools configured yet</h3>
@@ -429,7 +470,7 @@ function renderDashboardSchools(filteredList = null) {
 
     return `
       <tr>
-        <td>
+        <td data-label="School">
           <div style="display: flex; align-items: center; gap: 12px;">
             ${logoHtml}
             <div>
@@ -438,19 +479,20 @@ function renderDashboardSchools(filteredList = null) {
             </div>
           </div>
         </td>
-        <td><strong style="color: var(--primary); font-size: 0.85rem; font-family: monospace;">${s.schoolId}</strong></td>
-        <td>
+        <td data-label="School ID"><strong style="color: var(--primary); font-size: 0.85rem;">${s.schoolId}</strong></td>
+        <td data-label="Phone"><span style="font-size: 0.825rem; color: var(--text-main); font-weight: 500;">${s.phoneNumber || s.phone || '—'}</span></td>
+        <td data-label="Status">
           <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">
             ${s.status || 'Active'}
           </span>
         </td>
-        <td><span style="font-size: 0.85rem; font-weight: 600;">${additionalUsersCount} Users</span></td>
-        <td>
+        <td data-label="Users"><span style="font-size: 0.85rem; font-weight: 600;">${additionalUsersCount} Users</span></td>
+        <td data-label="Sessions">
           <span class="badge ${schoolSessionsCount > 0 ? 'badge-active' : 'badge-inactive'}">
             ${schoolSessionsCount} Active
           </span>
         </td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${s.lastUpdated || 'Recently'}</span></td>
+        <td data-label="Updated"><span style="font-size: 0.8rem; color: var(--text-muted);">${s.lastUpdated || 'Recently'}</span></td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">
             Manage School &rarr;
@@ -472,7 +514,7 @@ function renderAllSchoolsView(filteredList = null) {
 
   if (list.length === 0) {
     tbody.innerHTML = `
-      <tr><td colspan="7"><div class="empty-box"><h3>No schools found</h3></div></td></tr>
+      <tr><td colspan="8"><div class="empty-box"><h3>No schools found</h3></div></td></tr>
     `;
     return;
   }
@@ -486,25 +528,26 @@ function renderAllSchoolsView(filteredList = null) {
 
     return `
       <tr>
-        <td>
+        <td data-label="School">
           <div style="display: flex; align-items: center; gap: 12px;">
             ${logoHtml}
             <span style="font-weight: 700; color: var(--text-main); font-size: 0.9rem;">${s.schoolName || s.name}</span>
           </div>
         </td>
-        <td><strong style="color: var(--primary); font-family: monospace;">${s.schoolId}</strong></td>
-        <td>
+        <td data-label="School ID"><strong style="color: var(--primary);">${s.schoolId}</strong></td>
+        <td data-label="Phone"><span style="font-size: 0.825rem; color: var(--text-main); font-weight: 500;">${s.phoneNumber || s.phone || '—'}</span></td>
+        <td data-label="Status">
           <span class="badge ${s.status === 'Active' ? 'badge-active' : 'badge-inactive'}">
             ${s.status || 'Active'}
           </span>
         </td>
-        <td><span style="font-size: 0.85rem; font-weight: 600;">${additionalUsersCount} Users</span></td>
-        <td>
+        <td data-label="Users"><span style="font-size: 0.85rem; font-weight: 600;">${additionalUsersCount} Users</span></td>
+        <td data-label="Devices">
           <span class="badge ${schoolSessionsCount > 0 ? 'badge-active' : 'badge-inactive'}">
             ${schoolSessionsCount} Active
           </span>
         </td>
-        <td><span style="font-size: 0.825rem; color: var(--text-muted);">${s.address || 'Campus Address'}</span></td>
+        <td data-label="Address"><span style="font-size: 0.825rem; color: var(--text-muted);">${s.address || 'Campus Address'}</span></td>
         <td style="text-align: right;">
           <button class="btn btn-secondary btn-sm" onclick="window.openSchoolDetails('${s.schoolId}')">Open School</button>
         </td>
@@ -540,30 +583,33 @@ function renderAccountsView() {
 
     return `
       <tr>
-        <td>
+        <td data-label="Account">
           <div style="font-weight: 700; color: var(--text-main);">${acc.displayName || acc.name}</div>
           <div style="font-size: 0.725rem; color: var(--text-muted);">${acc.email || 'No email'}</div>
         </td>
-        <td>
+        <td data-label="Type">
           <span class="badge" style="${isSchoolAccount ? 'background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;' : 'background:#f3e8ff; color:#7e22ce; border: 1px solid #ddd6fe;'}">
-            ${isSchoolAccount ? 'Primary School Account' : 'School User Account'}
+            ${isSchoolAccount ? 'School Account' : 'User Account'}
           </span>
         </td>
-        <td><span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">${schoolName} (${acc.schoolId})</span></td>
-        <td>
+        <td data-label="School"><span style="font-size: 0.85rem; font-weight: 600; color: var(--primary);">${schoolName}</span></td>
+        <td data-label="Status">
           <span class="badge ${acc.status === 'Active' ? 'badge-active' : 'badge-inactive'}">
             ${acc.status || 'Active'}
           </span>
         </td>
-        <td>
+        <td data-label="Devices">
           <span style="font-size: 0.85rem; font-weight: 600; color: ${activeSessions >= limit ? '#dc2626' : '#2563eb'};">
-            ${activeSessions} / ${limit} Devices Active
+            ${activeSessions} / ${limit} Devices
           </span>
         </td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${acc.firebaseUid || acc.uid}')">
-            Manage & Sessions
-          </button>
+          <div style="display: flex; gap: 6px; justify-content: flex-end;">
+            <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${acc.firebaseUid || acc.uid}')">
+              Manage
+            </button>
+            ${!isSchoolAccount ? `<button class="btn btn-danger-outline btn-sm" onclick="window.openDeleteUserModal('${acc.firebaseUid || acc.uid}')">Delete</button>` : ''}
+          </div>
         </td>
       </tr>
     `;
@@ -645,27 +691,25 @@ function renderAllSessionsView() {
 
     return `
       <tr>
-        <td>
+        <td data-label="School">
           <div style="font-weight: 700; color: var(--text-main); font-size: 0.875rem;">${schoolName}</div>
-          <div style="font-size: 0.75rem; color: var(--primary); font-weight: 600; font-family: monospace;">${ses.schoolId}</div>
         </td>
-        <td>
+        <td data-label="User">
           <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">${userObj ? (userObj.displayName || userObj.name) : (ses.userName || 'School User')}</div>
           <div style="font-size: 0.75rem; color: var(--text-muted);">${userObj?.email || ses.userEmail || ''}</div>
         </td>
-        <td>
+        <td data-label="Device">
           <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">${ses.deviceName || 'Web Browser'}</div>
-          ${isCurrent ? '<span class="badge" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-size:0.675rem; font-weight:700;">Current Device</span>' : '<span style="font-size:0.7rem; color:var(--text-muted);">Other Device</span>'}
+          ${isCurrent ? '<span class="badge" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-size:0.675rem; font-weight:700;">Current Device</span>' : ''}
         </td>
-        <td><span style="font-family: monospace; font-size: 0.75rem; color: var(--text-muted);">${ses.deviceId || 'DEV'}</span></td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLoginTime || 'Active'}</span></td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLastActive || 'Now'}</span></td>
-        <td>
+        <td data-label="Login"><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLoginTime || 'Active'}</span></td>
+        <td data-label="Last Active"><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLastActive || 'Now'}</span></td>
+        <td data-label="Devices">
           <span style="font-size: 0.85rem; font-weight: 600; color: ${userActiveCount >= deviceLimit ? '#dc2626' : '#2563eb'};">
-            ${userActiveCount} / ${deviceLimit} Devices
+            ${userActiveCount} / ${deviceLimit}
           </span>
         </td>
-        <td><span class="badge badge-active">Active</span></td>
+        <td data-label="Status"><span class="badge badge-active">Active</span></td>
         <td style="text-align: right;">
           <button class="btn btn-danger-outline btn-sm" onclick="window.forceLogoutSession('${ses.sessionId || ses.id}')">
             Force Logout
@@ -698,15 +742,15 @@ function renderAdminLogsView(filteredList = null) {
 
   tbody.innerHTML = list.map((log) => `
     <tr>
-      <td>
+      <td data-label="Action">
         <span class="badge" style="background: #f8fafc; color: var(--text-main); border: 1px solid var(--border); font-weight: 700;">
           ${log.action || 'Admin Action'}
         </span>
       </td>
-      <td><strong style="color: var(--primary); font-size: 0.875rem;">${log.target || '—'}</strong></td>
-      <td><span style="font-size: 0.825rem; color: var(--text-body);">${log.details || 'Success'}</span></td>
-      <td><span style="font-size: 0.775rem; color: var(--text-muted);">${log.admin || 'Super Admin'}</span></td>
-      <td><span style="font-size: 0.775rem; color: var(--text-muted);">${log.formattedTime || 'Just now'}</span></td>
+      <td data-label="Target"><strong style="color: var(--primary); font-size: 0.875rem;">${log.target || '—'}</strong></td>
+      <td data-label="Details"><span style="font-size: 0.825rem; color: var(--text-body);">${log.details || 'Success'}</span></td>
+      <td data-label="Admin"><span style="font-size: 0.775rem; color: var(--text-muted);">${log.admin || 'Super Admin'}</span></td>
+      <td data-label="Time"><span style="font-size: 0.775rem; color: var(--text-muted);">${log.formattedTime || 'Just now'}</span></td>
     </tr>
   `).join("");
 }
@@ -740,6 +784,133 @@ function setupDeactivationModal() {
       await window.executeToggleSchoolStatus(sid, "Active");
       schoolToDeactivateId = null;
     });
+  }
+}
+
+/**
+ * Open Double-Confirmation Modal for Deleting School User
+ */
+window.openDeleteUserModal = (userUid) => {
+  if (!navigator.onLine) {
+    showToast("Cannot delete user while offline. Please check your internet connection.", "error");
+    return;
+  }
+
+  const user = liveUsers.find((u) => (u.firebaseUid || u.uid) === userUid);
+  if (!user) {
+    showToast("User not found.", "error");
+    return;
+  }
+
+  userPendingDeleteUid = userUid;
+  deleteUserStep = 1;
+
+  renderDeleteUserModalContent(user);
+  openModal("modal-delete-user");
+};
+
+function renderDeleteUserModalContent(user) {
+  const titleEl = document.getElementById("del-user-modal-title");
+  const bodyEl = document.getElementById("del-user-modal-body");
+  const footerEl = document.getElementById("del-user-modal-footer");
+  if (!bodyEl || !footerEl) return;
+
+  const displayName = user?.displayName || user?.name || user?.email || "School User";
+  const userEmail = user?.email ? ` (${user.email})` : "";
+  const schoolName = user?.schoolId || "";
+
+  if (deleteUserStep === 1) {
+    if (titleEl) titleEl.textContent = "Delete School User";
+    bodyEl.innerHTML = `
+      <p style="font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 8px;">
+        Are you sure you want to delete <span style="font-weight: 800; color: #dc2626;">${displayName}${userEmail}</span>?
+      </p>
+      <p style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px;">
+        This will remove the user account under <strong>School ID: ${schoolName}</strong>, revoke institutional access, and terminate all active sessions connected under this account.
+      </p>
+    `;
+    footerEl.innerHTML = `
+      <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-delete-user')">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">Confirm</button>
+    `;
+  } else if (deleteUserStep === 2) {
+    if (titleEl) titleEl.textContent = "Final Confirmation: Permanent Deletion";
+    bodyEl.innerHTML = `
+      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px;">
+        <p style="font-size: 0.875rem; color: #991b1b; font-weight: 700; margin-bottom: 6px;">
+          ⚠️ This action is permanent and cannot be undone.
+        </p>
+        <p style="font-size: 0.825rem; color: #7f1d1d; line-height: 1.5; margin: 0;">
+          Are you completely certain you want to permanently delete <strong>${displayName}</strong>? All active and historical session records will be purged immediately.
+        </p>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted);">Click below to permanently execute deletion.</p>
+    `;
+    footerEl.innerHTML = `
+      <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-delete-user')">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">
+        <span class="btn-spinner" style="display: none;"></span>
+        <span class="btn-text">Confirm Delete</span>
+      </button>
+    `;
+  }
+
+  // Re-bind click event
+  const confirmBtn = document.getElementById("confirm-delete-user-btn");
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      if (deleteUserStep === 1) {
+        deleteUserStep = 2;
+        renderDeleteUserModalContent(user);
+      } else if (deleteUserStep === 2) {
+        if (!navigator.onLine) {
+          showToast("Network disconnected. Deletion halted.", "error");
+          closeModal("modal-delete-user");
+          return;
+        }
+
+        const btnText = confirmBtn.querySelector(".btn-text");
+        const btnSpinner = confirmBtn.querySelector(".btn-spinner");
+        if (btnText) btnText.textContent = "Deleting...";
+        if (btnSpinner) btnSpinner.style.display = "inline-block";
+        confirmBtn.disabled = true;
+
+        try {
+          await deleteUserAccount(userPendingDeleteUid);
+
+          // Optimistically update local in-memory state
+          const targetUid = userPendingDeleteUid;
+          const deletedUser = liveUsers.find((u) => (u.firebaseUid || u.uid) === targetUid);
+          liveUsers = liveUsers.filter((u) => (u.firebaseUid || u.uid) !== targetUid);
+          liveSessions = liveSessions.filter((ses) => ses.userUid !== targetUid);
+
+          if (deletedUser?.schoolId) {
+            const sch = liveSchools.find((s) => s.schoolId === deletedUser.schoolId);
+            if (sch && sch.usersCount > 0) sch.usersCount--;
+          }
+
+          closeModal("modal-delete-user");
+          showToast(`User ${displayName} deleted successfully!`, "success");
+
+          // Re-render relevant views
+          if (currentView === "school-details" && selectedSchool) {
+            renderSchoolUsersTab(selectedSchool.schoolId);
+            renderSchoolSessionsList(selectedSchool.schoolId);
+          }
+          renderAccountsView();
+          renderDashboardSchools();
+          renderAllSchoolsView();
+          updateMetrics();
+        } catch (delErr) {
+          console.error("Delete user error:", delErr);
+          showToast("Failed to delete user: " + (delErr.message || "Network error"), "error");
+          closeModal("modal-delete-user");
+        } finally {
+          userPendingDeleteUid = null;
+          deleteUserStep = 1;
+        }
+      }
+    };
   }
 }
 
@@ -899,9 +1070,12 @@ function refreshSchoolDetailsView() {
   setText("info-school-uid", s.firebaseUid || "Not assigned");
   setText("info-school-status", s.status || "Active");
   setText("info-school-email", s.adminEmail || "None");
+  setText("info-school-phone", s.phoneNumber || s.phone || "—");
   setText("info-school-address", s.address || "Campus Address");
   setText("info-school-logourl", s.logoUrl || "None configured");
-  setText("sd-student-placeholder-id", s.schoolId);
+  
+  // Tab 5: Student Data Upload State
+  updateStudentUploadModule(s);
 
   const startCls = s.startingClass || "Nursery";
   const endCls = s.endingClass || "Class 10";
@@ -1011,7 +1185,10 @@ function renderSchoolUsersList(schoolId) {
           </div>
         </td>
         <td style="text-align: right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.firebaseUid || u.uid}')">Manage User</button>
+          <div style="display: flex; gap: 6px; justify-content: flex-end;">
+            <button class="btn btn-secondary btn-sm" onclick="window.openEditUserPermsModal('${u.firebaseUid || u.uid}')">Manage User</button>
+            <button class="btn btn-danger-outline btn-sm" onclick="window.openDeleteUserModal('${u.firebaseUid || u.uid}')">Delete</button>
+          </div>
         </td>
       </tr>
     `;
@@ -1204,24 +1381,6 @@ window.forceLogoutSession = async (sessionId) => {
 };
 
 /**
- * Edit School Modal Handler
- */
-window.openEditSchoolModal = () => {
-  if (!selectedSchool) return;
-  const nameInput = document.getElementById("edit-school-name");
-  const logoInput = document.getElementById("edit-school-logo");
-  const emailInput = document.getElementById("edit-school-email");
-  const addressInput = document.getElementById("edit-school-address");
-
-  if (nameInput) nameInput.value = selectedSchool.schoolName || selectedSchool.name || "";
-  if (logoInput) logoInput.value = selectedSchool.logoUrl || "";
-  if (emailInput) emailInput.value = selectedSchool.adminEmail || "";
-  if (addressInput) addressInput.value = selectedSchool.address || "";
-
-  openModal("modal-edit-school");
-};
-
-/**
  * Add Existing Account Modal Handler (School vs User)
  */
 window.openAddAccountModal = (defaultType = "school", preselectedSchoolId = "") => {
@@ -1397,6 +1556,7 @@ function setupForms() {
       const schoolName = document.getElementById("acc-school-name").value.trim();
       const logoUrl = document.getElementById("acc-school-logo").value.trim();
       const adminEmail = document.getElementById("acc-school-email").value.trim();
+      const phone = document.getElementById("acc-school-phone") ? document.getElementById("acc-school-phone").value.trim() : "";
       const address = document.getElementById("acc-school-address").value.trim();
       const status = document.getElementById("acc-school-status").value;
       const deviceLimit = document.getElementById("acc-school-device-limit").value;
@@ -1435,6 +1595,7 @@ function setupForms() {
           schoolName,
           logoUrl,
           adminEmail,
+          phone,
           address,
           status,
           startingClass,
@@ -1448,7 +1609,9 @@ function setupForms() {
         showToast(`School Account ${schoolName} (${schoolId}) saved successfully!`, "success");
       } catch (err) {
         console.error("Save School error:", err);
-        showToast("Failed to save school account.", "error");
+        // Surface duplicate-check errors and other specific error messages directly to admin
+        const msg = (err && err.message) ? err.message : "Failed to save school account.";
+        showToast(msg, "error");
       }
     });
   }
@@ -1485,7 +1648,9 @@ function setupForms() {
         showToast(`User account configured under School ID ${schoolId}!`, "success");
       } catch (err) {
         console.error("Save User error:", err);
-        showToast("Failed to save user account.", "error");
+        // Surface duplicate-check / cross-school assignment errors directly to admin
+        const msg = (err && err.message) ? err.message : "Failed to save user account.";
+        showToast(msg, "error");
       }
     });
   }
@@ -1500,6 +1665,8 @@ function setupForms() {
       const schoolName = document.getElementById("edit-school-name").value.trim();
       const logoUrl = document.getElementById("edit-school-logo").value.trim();
       const adminEmail = document.getElementById("edit-school-email").value.trim();
+      const phoneInput = document.getElementById("edit-school-phone");
+      const phone = phoneInput ? phoneInput.value.trim() : (selectedSchool.phoneNumber || selectedSchool.phone || "");
       const address = document.getElementById("edit-school-address").value.trim();
       const startingClass = document.getElementById("edit-school-start-class").value;
       const endingClass = document.getElementById("edit-school-end-class").value;
@@ -1521,6 +1688,7 @@ function setupForms() {
           name: schoolName,
           logoUrl,
           adminEmail,
+          phoneNumber: phone,
           address,
           startingClass,
           endingClass,
@@ -1532,17 +1700,25 @@ function setupForms() {
         selectedSchool.name = schoolName;
         selectedSchool.logoUrl = logoUrl;
         selectedSchool.adminEmail = adminEmail;
+        selectedSchool.phoneNumber = phone;
+        selectedSchool.phone = phone;
         selectedSchool.address = address;
         selectedSchool.startingClass = startingClass;
         selectedSchool.endingClass = endingClass;
         selectedSchool.subjects = subjects;
 
-        renderSchoolDetails(selectedSchool.schoolId);
+        // Keep matching item in liveSchools array up to date immediately
+        const schoolIdx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+        if (schoolIdx !== -1) {
+          liveSchools[schoolIdx] = { ...liveSchools[schoolIdx], ...selectedSchool };
+        }
+
+        refreshSchoolDetailsView();
         renderDashboardSchools();
         renderAllSchoolsView();
 
         closeModal("modal-edit-school");
-        showToast(`School ${schoolName} updated successfully!`, "success");
+        showToast("School information updated successfully.", "success");
       } catch (err) {
         console.error("Update school error:", err);
         showToast("Failed to update school information.", "error");
@@ -1614,6 +1790,8 @@ window.openEditSchoolModal = (schoolId) => {
   const targetSchool = schoolId ? liveSchools.find((s) => s.schoolId === schoolId) : selectedSchool;
   if (!targetSchool) return;
 
+  selectedSchool = targetSchool;
+
   const setVal = (id, val) => {
     const el = document.getElementById(id);
     if (el) el.value = val || "";
@@ -1622,6 +1800,7 @@ window.openEditSchoolModal = (schoolId) => {
   setVal("edit-school-name", targetSchool.schoolName || targetSchool.name || "");
   setVal("edit-school-logo", targetSchool.logoUrl || "");
   setVal("edit-school-email", targetSchool.adminEmail || "");
+  setVal("edit-school-phone", targetSchool.phoneNumber || targetSchool.phone || "");
   setVal("edit-school-address", targetSchool.address || "");
 
   const startClass = targetSchool.startingClass || "Nursery";
@@ -1763,9 +1942,379 @@ if (savePermsBtn) {
 function setupMobileDrawer() {
   const btn = document.getElementById("mobile-menu-btn");
   const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
   if (btn && sidebar) {
     btn.addEventListener("click", () => {
       sidebar.classList.toggle("open");
+      if (overlay) overlay.classList.toggle("active", sidebar.classList.contains("open"));
+    });
+  }
+  if (overlay && sidebar) {
+    overlay.addEventListener("click", () => {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("active");
+    });
+  }
+
+  // Wire bottom navigation bar
+  const bottomNavItems = document.querySelectorAll(".bottom-nav-item");
+  bottomNavItems.forEach((item) => {
+    item.addEventListener("click", () => {
+      const target = item.getAttribute("data-view");
+      if (target && window.navigateView) {
+        window.navigateView(target);
+      }
+    });
+  });
+}
+
+/**
+ * ============================================================================
+ * STUDENT DATASET FILE UPLOAD MANAGEMENT (School Data, UDISE, 3.0)
+ * ============================================================================
+ */
+
+/**
+ * Switch active student dataset tab (School Data vs UDISE vs 3.0)
+ */
+window.switchStudentUploadDataset = (datasetKey) => {
+  if (!DATASET_SCHEMAS[datasetKey]) return;
+  currentUploadDataset = datasetKey;
+
+  // Clear pending file selection
+  window.clearSelectedStudentFile();
+
+  // Update tab buttons
+  const tabs = {
+    [DATASET_KEYS.SCHOOL_DATA]: document.getElementById("btn-tab-school-data"),
+    [DATASET_KEYS.UDISE]: document.getElementById("btn-tab-udise"),
+    [DATASET_KEYS.THREE_POINT_ZERO]: document.getElementById("btn-tab-p3")
+  };
+
+  Object.entries(tabs).forEach(([k, btn]) => {
+    if (!btn) return;
+    if (k === datasetKey) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  renderDatasetUploadTab(datasetKey, selectedSchool);
+};
+
+/**
+ * Update the overall student upload module for a school
+ */
+function updateStudentUploadModule(school) {
+  const badgeEl = document.getElementById("sd-student-school-id-badge");
+  if (badgeEl) {
+    badgeEl.textContent = school?.schoolId || "—";
+  }
+
+  renderDatasetUploadTab(currentUploadDataset, school);
+
+  // If school has schoolId, fetch live dataset summaries asynchronously
+  if (school?.schoolId) {
+    getSchoolDatasetSummaries(school.schoolId).then((summaries) => {
+      if (summaries && selectedSchool && selectedSchool.schoolId === school.schoolId) {
+        selectedSchool.datasets = { ...(selectedSchool.datasets || {}), ...summaries };
+        updateDatasetStatusValues(currentUploadDataset, selectedSchool);
+      }
+    }).catch((err) => {
+      console.warn("Could not load dataset summaries:", err);
     });
   }
 }
+
+/**
+ * Render dataset upload tab UI based on selected dataset key
+ */
+function renderDatasetUploadTab(datasetKey, school) {
+  const schema = DATASET_SCHEMAS[datasetKey];
+  if (!schema) return;
+
+  const titleEl = document.getElementById("dataset-title-display");
+  const descEl = document.getElementById("dataset-desc-display");
+  const badgeEl = document.getElementById("dataset-type-badge");
+  const zoneLabelEl = document.getElementById("upload-zone-dataset-label");
+  const btnLabelEl = document.getElementById("btn-upload-dataset-label");
+  const uniqueIdEl = document.getElementById("dataset-status-unique-id");
+
+  if (titleEl) titleEl.textContent = schema.label;
+  if (zoneLabelEl) zoneLabelEl.textContent = schema.label;
+  if (btnLabelEl) btnLabelEl.textContent = schema.label;
+  if (uniqueIdEl) uniqueIdEl.textContent = schema.uniqueIdLabel;
+
+  if (descEl) {
+    if (datasetKey === DATASET_KEYS.SCHOOL_DATA) {
+      descEl.textContent = "Permanent master student records for the school institution. Handled independently from weekly compliance snapshots.";
+    } else if (datasetKey === DATASET_KEYS.UDISE) {
+      descEl.textContent = "National UDISE compliance records. Uploading replaces the previous weekly UDISE dataset for this school.";
+    } else if (datasetKey === DATASET_KEYS.THREE_POINT_ZERO) {
+      descEl.textContent = "State Portal 3.0 enrollment records. Uploading replaces the previous weekly 3.0 dataset for this school.";
+    }
+  }
+
+  if (badgeEl) {
+    if (datasetKey === DATASET_KEYS.SCHOOL_DATA) {
+      badgeEl.className = "badge badge-active";
+      badgeEl.style.background = "";
+      badgeEl.style.color = "";
+      badgeEl.style.border = "";
+      badgeEl.textContent = "Master Student Data";
+    } else {
+      badgeEl.className = "badge";
+      badgeEl.style.background = "#f1f5f9";
+      badgeEl.style.color = "#475569";
+      badgeEl.style.border = "1px solid #cbd5e1";
+      badgeEl.textContent = "Weekly Snapshot Dataset";
+    }
+  }
+
+  // Populate required headers pills
+  const pillsContainer = document.getElementById("dataset-headers-pills");
+  if (pillsContainer) {
+    pillsContainer.innerHTML = schema.requiredHeaders.map((h) => {
+      const isUnique = h.key === schema.uniqueIdField;
+      return `<span class="badge" style="background: ${isUnique ? '#eff6ff' : '#f8fafc'}; color: ${isUnique ? '#1d4ed8' : '#334155'}; border: 1px solid ${isUnique ? '#93c5fd' : '#e2e8f0'}; font-size: 0.775rem; padding: 3px 9px;">${h.label}${isUnique ? ' (Unique ID)' : ''}</span>`;
+    }).join("");
+  }
+
+  // Update current dataset status for school
+  updateDatasetStatusValues(datasetKey, school);
+}
+
+/**
+ * Update the status card values (count, updated date, filename)
+ */
+function updateDatasetStatusValues(datasetKey, school) {
+  const countEl = document.getElementById("dataset-status-count");
+  const updatedEl = document.getElementById("dataset-status-updated");
+  const fileEl = document.getElementById("dataset-status-file");
+
+  if (!school) {
+    if (countEl) countEl.textContent = "0 Records";
+    if (updatedEl) updatedEl.textContent = "Not uploaded yet";
+    if (fileEl) fileEl.textContent = "—";
+    return;
+  }
+
+  const dsMeta = (school.datasets && school.datasets[datasetKey]) ? school.datasets[datasetKey] : null;
+  const count = dsMeta?.recordCount ?? (datasetKey === DATASET_KEYS.SCHOOL_DATA && school.studentsCount ? school.studentsCount : 0);
+
+  if (countEl) {
+    countEl.textContent = `${count} Record${count === 1 ? '' : 's'}`;
+  }
+
+  if (updatedEl) {
+    if (dsMeta && dsMeta.updatedAt) {
+      const d = dsMeta.updatedAt.toDate ? dsMeta.updatedAt.toDate() : new Date(dsMeta.updatedAt);
+      updatedEl.textContent = d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    } else {
+      updatedEl.textContent = count > 0 ? "Previously Uploaded" : "Not uploaded yet";
+    }
+  }
+
+  if (fileEl) {
+    fileEl.textContent = dsMeta?.fileName || (count > 0 ? "Authoritative dataset" : "—");
+  }
+}
+
+/**
+ * Handle file input selection & perform client-side pre-validation
+ */
+window.handleStudentExcelFileSelected = async (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  selectedExcelFile = file;
+  parsedStudentData = null;
+
+  const infoBar = document.getElementById("upload-file-info-bar");
+  const nameEl = document.getElementById("upload-file-name");
+  const metaEl = document.getElementById("upload-file-meta");
+  const alertEl = document.getElementById("upload-status-alert");
+  const uploadBtn = document.getElementById("btn-submit-upload");
+
+  // Show file info row
+  if (infoBar) {
+    infoBar.style.display = "flex";
+    if (nameEl) nameEl.textContent = file.name;
+    if (metaEl) {
+      const sizeKb = (file.size / 1024).toFixed(1);
+      metaEl.textContent = `${sizeKb} KB • Validating structure...`;
+    }
+  }
+
+  // Pre-validate file client-side
+  const schoolId = selectedSchool?.schoolId || "";
+  const result = await parseAndValidateExcel(file, currentUploadDataset, schoolId);
+
+  if (!result.valid) {
+    parsedStudentData = null;
+    if (uploadBtn) uploadBtn.disabled = true;
+    if (alertEl) {
+      alertEl.style.display = "block";
+      alertEl.style.background = "#fef2f2";
+      alertEl.style.border = "1px solid #fecaca";
+      alertEl.style.color = "#991b1b";
+      alertEl.innerHTML = `<strong>Validation Error:</strong> ${result.error}`;
+    }
+    if (metaEl) metaEl.textContent = "Validation failed. Please fix columns.";
+    return;
+  }
+
+  // Valid file!
+  parsedStudentData = result;
+  if (uploadBtn) uploadBtn.disabled = false;
+  if (metaEl) {
+    metaEl.textContent = `${(file.size / 1024).toFixed(1)} KB • ${result.recordCount} records ready for upload`;
+  }
+
+  if (alertEl) {
+    alertEl.style.display = "block";
+    alertEl.style.background = "#f0fdf4";
+    alertEl.style.border = "1px solid #bbf7d0";
+    alertEl.style.color = "#166534";
+    let alertHtml = `<strong>Validation Passed:</strong> Ready to upload <strong>${result.recordCount}</strong> students to ${result.datasetLabel}.`;
+    if (result.warnings && result.warnings.length > 0) {
+      alertHtml += `<div style="margin-top: 6px; font-size: 0.775rem; color: #15803d;"><em>Note: ${result.warnings[0]}</em></div>`;
+    }
+    alertEl.innerHTML = alertHtml;
+  }
+};
+
+/**
+ * Clear selected file
+ */
+window.clearSelectedStudentFile = () => {
+  selectedExcelFile = null;
+  parsedStudentData = null;
+
+  const fileInput = document.getElementById("student-excel-input");
+  if (fileInput) fileInput.value = "";
+
+  const infoBar = document.getElementById("upload-file-info-bar");
+  if (infoBar) infoBar.style.display = "none";
+
+  const alertEl = document.getElementById("upload-status-alert");
+  if (alertEl) alertEl.style.display = "none";
+
+  const uploadBtn = document.getElementById("btn-submit-upload");
+  if (uploadBtn) uploadBtn.disabled = true;
+};
+
+/**
+ * Execute Dataset Upload to Firestore
+ */
+window.executeStudentDatasetUpload = async () => {
+  if (isUploadingDataset) return;
+  if (!selectedSchool || !selectedSchool.schoolId) {
+    showToast("No school selected for upload.", "error");
+    return;
+  }
+
+  if (!navigator.onLine) {
+    showToast("Cannot upload dataset while offline. Please reconnect to the internet.", "error");
+    const alertEl = document.getElementById("upload-status-alert");
+    if (alertEl) {
+      alertEl.style.display = "block";
+      alertEl.style.background = "#fef2f2";
+      alertEl.style.border = "1px solid #fecaca";
+      alertEl.style.color = "#991b1b";
+      alertEl.innerHTML = `<strong>Offline:</strong> Internet disconnected. Existing data has not been modified.`;
+    }
+    return;
+  }
+
+  if (!parsedStudentData || !Array.isArray(parsedStudentData.students) || parsedStudentData.students.length === 0) {
+    showToast("Please choose and validate a valid Excel file first.", "error");
+    return;
+  }
+
+  const uploadBtn = document.getElementById("btn-submit-upload");
+  const spinnerEl = document.getElementById("upload-loading-spinner");
+  const spinnerTextEl = document.getElementById("upload-loading-text");
+  const alertEl = document.getElementById("upload-status-alert");
+
+  isUploadingDataset = true;
+  if (uploadBtn) uploadBtn.disabled = true;
+  if (spinnerEl) spinnerEl.style.display = "inline-flex";
+  if (spinnerTextEl) spinnerTextEl.textContent = `Uploading ${parsedStudentData.recordCount} records...`;
+
+  try {
+    const res = await uploadSchoolDataset(
+      selectedSchool.schoolId,
+      currentUploadDataset,
+      parsedStudentData.students,
+      { fileName: selectedExcelFile?.name || "students.xlsx" }
+    );
+
+    // Update local school object metadata
+    if (!selectedSchool.datasets) selectedSchool.datasets = {};
+    selectedSchool.datasets[currentUploadDataset] = {
+      recordCount: res.recordCount,
+      fileName: selectedExcelFile?.name || "students.xlsx",
+      updatedAt: new Date()
+    };
+
+    if (currentUploadDataset === DATASET_KEYS.SCHOOL_DATA) {
+      selectedSchool.studentsCount = res.recordCount;
+    }
+
+    // Refresh live array
+    const liveIdx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (liveIdx !== -1) {
+      liveSchools[liveIdx] = { ...liveSchools[liveIdx], ...selectedSchool };
+    }
+
+    // Determine exact success message required by spec
+    let successMsg = "Student data uploaded successfully.";
+    if (currentUploadDataset === DATASET_KEYS.UDISE) {
+      successMsg = "UDISE data uploaded successfully.";
+    } else if (currentUploadDataset === DATASET_KEYS.THREE_POINT_ZERO) {
+      successMsg = "3.0 data uploaded successfully.";
+    } else if (currentUploadDataset === DATASET_KEYS.SCHOOL_DATA) {
+      successMsg = "School data uploaded successfully.";
+    }
+
+    showToast(successMsg, "success");
+
+    if (alertEl) {
+      alertEl.style.display = "block";
+      alertEl.style.background = "#f0fdf4";
+      alertEl.style.border = "1px solid #bbf7d0";
+      alertEl.style.color = "#166534";
+      alertEl.innerHTML = `<strong>Success:</strong> ${successMsg} (${res.recordCount} records stored).`;
+    }
+
+    // Update status card values immediately
+    updateDatasetStatusValues(currentUploadDataset, selectedSchool);
+
+    // Clear file selection after upload
+    selectedExcelFile = null;
+    parsedStudentData = null;
+    const fileInput = document.getElementById("student-excel-input");
+    if (fileInput) fileInput.value = "";
+    const infoBar = document.getElementById("upload-file-info-bar");
+    if (infoBar) infoBar.style.display = "none";
+
+  } catch (err) {
+    console.error("Dataset upload failed:", err);
+    showToast(`Upload failed: ${err.message}`, "error");
+
+    if (alertEl) {
+      alertEl.style.display = "block";
+      alertEl.style.background = "#fef2f2";
+      alertEl.style.border = "1px solid #fecaca";
+      alertEl.style.color = "#991b1b";
+      alertEl.innerHTML = `<strong>Upload Failed:</strong> ${err.message}. Previously stored data remains intact.`;
+    }
+    if (uploadBtn) uploadBtn.disabled = false;
+  } finally {
+    isUploadingDataset = false;
+    if (spinnerEl) spinnerEl.style.display = "none";
+  }
+};
+

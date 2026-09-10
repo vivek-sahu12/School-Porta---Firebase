@@ -1,0 +1,988 @@
+PROJECT CONTEXT DOCUMENT
+Project: School Data Portal (school-data-portal)
+Generated: 2026-09-09
+Document Status: CURRENT PROJECT SNAPSHOT
+
+================================================================================
+1. PROJECT IDENTITY
+================================================================================
+
+- Project Name: School Data Portal ("school-data-portal" in package.json; displayed as "School Portal" and "School Data Portal - Admin").
+- Project Purpose: A centralized, multi-tenant, offline-first school data and institutional administration system designed to manage educational institutions, student demographic/academic records across disparate datasets (School Data, UDISE, and 3.0), staff user accounts, granular permissions, concurrent device limits, and active connected device sessions.
+- Main Problem the Project Solves:
+  1. Resolves fragmentation across multiple government and institutional student data formats (internal School Data records, national UDISE compliance registries, and State Portal 3.0 enrollment records).
+  2. Eliminates unauthorized credential sharing and unmonitored concurrent logins by enforcing strict, configurable per-account concurrent device limits (1 to 15 devices) and real-time session tracking.
+  3. Provides resilient offline-first usability for schools in areas with intermittent internet connectivity via IndexedDB caching and an offline mutation/synchronization queue.
+  4. Delivers two isolated control panels: a master Super Admin Control Panel for overarching institutional oversight and a dedicated School Portal for campus-level data exploration and staff management.
+- Intended Users:
+  1. Super Administrators (Master administrative operators managing the entire multi-school network, registering schools, creating primary accounts, revoking access, monitoring live sessions, and auditing system events).
+  2. School Primary Administrators / Institutional Accounts (Principal or administrative leadership account representing an individual school).
+  3. School Staff / Teachers / Operators (Sub-accounts under a specific school with role-based feature permissions such as Editable, Add Student, Delete Student, Excel Export, and Reports).
+- Target Organizations / Schools: K-12 educational institutions, primary and secondary schools, high schools offering classes from Nursery through Class 12, and state/national education network hubs.
+- Current Development Stage: Production-grade MVP / Active Functional Baseline (Frontend-driven architecture connected to live Firebase Authentication, Cloud Firestore, and local IndexedDB; student datasets are generated via an in-memory & IndexedDB caching engine; backend server is absent).
+- Main Application Type: Progressive Web Application (PWA) / Multi-Page Application (MPA) built with modern ES modules, Vanilla JavaScript, and native CSS3, bundled and served via Vite.
+- Frontend/Backend Architecture:
+  - Frontend: Pure Vanilla JavaScript (ES modules) with HTML5 and semantic CSS3. No heavy JS framework (no React, Angular, or Vue).
+  - Backend: Serverless / Backend-as-a-Service (BaaS). The client application communicates directly from the browser to Google Cloud Firebase services (Firebase Authentication and Cloud Firestore). No Node.js, Express, Python, or Go custom backend API exists.
+- Deployment / Hosting Setup: Configured for static hosting (Vite build output to dist/ directory; previously adapted for GitHub Pages / Firebase Hosting static deployment with relative path base `./`).
+- Repository / Project Structure: Single root directory containing Vite configuration, package definitions, two entry portals (`index.html` for School Portal and `admin/index.html` for Super Admin), modular CSS stylesheets, shared application icons, and an organized `js/` directory split into core modules (`firebase.js`, `offline-store.js`, `session-manager.js`, `school-config.js`, `image-resolver.js`), admin controllers (`js/admin/`), school controllers (`js/school/`), and user auth (`js/user/`).
+- Known Project Goals Found in Codebase:
+  - Integration of live CSV/Excel ingestion pipeline for student records (Student Data Module placeholder currently active).
+  - Expansion of fee management and student billing ledger.
+  - Native PDF report generation for student rosters and school cards.
+  - Cloud Functions migration for privileged operations (e.g., automated session garbage collection and administrative user provisioning).
+
+================================================================================
+2. COMPLETE TECHNOLOGY STACK
+================================================================================
+
+- Programming Languages:
+  - JavaScript (ECMAScript 2022+ / ES Modules) - Primary logic across all controllers, state management, and Firebase interactions.
+  - HTML5 - Semantic markup for authentication screens and administrative dashboards (`index.html`, `dashboard.html`, `admin/index.html`, `admin/dashboard.html`).
+  - CSS3 (Vanilla CSS with CSS Variables / Custom Properties) - Modern design system, responsive grids, flexbox layouts, modal overlays, toggles, badges, and mobile bottom navigation.
+- Frontend Framework / Library:
+  - NONE. Built entirely with Vanilla JavaScript and native DOM APIs.
+- Backend Framework / Runtime:
+  - NONE. Serverless architecture using Firebase client SDK directly from the browser.
+- Build Tool & Development Server:
+  - Vite (v5.3.1) - Configured in `vite.config.js` as a multi-page application (MPA) with Rollup options defining 4 distinct HTML entry points: `main`, `schoolDashboard`, `adminLogin`, and `adminDashboard`. Base path set to `./`.
+- CSS / UI Framework:
+  - Vanilla Custom CSS (No Tailwind CSS, Bootstrap, or Material UI).
+  - CSS files: `css/style.css` (School Login), `css/admin-login.css` (Super Admin Login), `css/school.css` (School Portal & Analytics), `css/dashboard.css` (Super Admin Panel).
+- Component Libraries / Design System:
+  - Bespoke, responsive design system utilizing CSS Custom Properties (`--primary`, `--primary-hover`, `--bg-main`, `--card-bg`, `--text-main`, `--text-muted`, `--border`, `--radius-md`, etc.).
+  - Google Fonts CDN: Inter font family (weights 400, 500, 600, 700, 800).
+  - SVG Vector Icons embedded inline for zero-dependency high-resolution rendering.
+- Authentication Technology:
+  - Firebase Authentication (v10.12.2 via modular SDK).
+  - Provider: Email / Password (`signInWithEmailAndPassword`).
+  - Persistence: Explicit `browserLocalPersistence` configured via `setPersistence(auth, browserLocalPersistence)`.
+- Database Technology:
+  - Cloud Firestore (Google Cloud Platform Firebase Modular SDK v10.12.2).
+  - Client-side IndexedDB (`SchoolPortalOfflineDB` v1) via native browser API (`js/offline-store.js`) for persistent offline caching of Firestore documents and queued write mutations.
+  - Browser `localStorage` and `sessionStorage` for session IDs, inactivity timestamps, and temporary redirect flags.
+- Firebase Services & SDKs:
+  - Firebase Modular SDK: `firebase/app`, `firebase/auth`, `firebase/firestore`.
+  - Import Map: Configured in all HTML headers linking to Google CDN (`https://www.gstatic.com/firebasejs/10.12.2/...`).
+  - Firebase Storage: NOT currently used. School logos use direct external URLs (e.g., Google Drive / CDN) processed by `js/image-resolver.js`.
+  - Firebase Functions: NOT FOUND / NOT IMPLEMENTED.
+- Third-Party Integrations:
+  - Google Drive CDN & Thumbnail Engine: Embedded regex parser in `js/image-resolver.js` converts Google Drive sharing links (`drive.google.com/file/d/...`, `drive.google.com/open?id=...`, `drive.google.com/uc?id=...`) to direct view endpoints (`drive.google.com/uc?export=view&id=...`, `lh3.googleusercontent.com/d/...`, and `drive.google.com/thumbnail?...`).
+- Version Numbers (Verifiable from package.json):
+  - firebase: ^10.12.2
+  - vite: ^5.3.1
+  - Node module resolution: "type": "module" in package.json.
+
+================================================================================
+3. FULL PROJECT STRUCTURE
+================================================================================
+
+f:/New Data Portal - Firebase/
+├── .gitignore
+├── dashboard.html
+├── icon.svg
+├── index.html
+├── manifest.json
+├── package-lock.json
+├── package.json
+├── vite.config.js
+├── admin/
+│   ├── dashboard.html
+│   ├── index.html
+│   └── manifest.json
+├── css/
+│   ├── admin-login.css
+│   ├── dashboard.css
+│   ├── school.css
+│   └── style.css
+└── js/
+    ├── firebase.js
+    ├── image-resolver.js
+    ├── offline-store.js
+    ├── school-config.js
+    ├── session-manager.js
+    ├── admin/
+    │   ├── dashboard.js
+    │   ├── firestore-service.js
+    │   ├── login.js
+    │   └── superadmin-ui.js
+    ├── school/
+    │   ├── dashboard.js
+    │   ├── school-ui.js
+    │   └── student-service.js
+    └── user/
+        └── login.js
+
+DETAILED ARCHITECTURAL MAP OF KEY FILES:
+
+- `package.json`
+  - Purpose: Node.js project manifest defining package metadata, build scripts (`dev`, `build`, `preview`), runtime dependency (`firebase`), and dev dependency (`vite`).
+- `vite.config.js`
+  - Purpose: Bundler configuration. Defines 4 discrete entry points:
+    1. `main` -> `index.html` (School Portal Login)
+    2. `schoolDashboard` -> `dashboard.html` (School Portal Dashboard)
+    3. `adminLogin` -> `admin/index.html` (Super Admin Login)
+    4. `adminDashboard` -> `admin/dashboard.html` (Super Admin Panel)
+    Configures `base: "./"` for portable relative-path deployment and copies public directory assets.
+- `manifest.json` & `admin/manifest.json`
+  - Purpose: Progressive Web App (PWA) manifests enabling standalone app installation on mobile/desktop devices for School Portal and Admin Panel respectively.
+- `icon.svg`
+  - Purpose: Scalable vector icon representing the School Data Portal brand; used as app favicon, PWA icon, and visual fallback for unconfigured school logos.
+- `index.html`
+  - Purpose: Public landing & authentication interface for School Accounts and School Users.
+  - Connections: Links to `css/style.css` and imports `js/user/login.js`. Contains email/password form, password toggle visibility button, and auth error alerts.
+- `dashboard.html`
+  - Purpose: Authenticated School Portal workspace.
+  - Connections: Links to `css/school.css` and imports `js/school/dashboard.js`. Contains 7 functional views:
+    1. `view-dashboard`: Dataset comparison strip (School Data, UDISE, 3.0), student counts, class-wise strength grid, gender distribution split bar, and 4-column category cards (GEN, OBC, SC, ST).
+    2. `view-school-info`: Detailed school campus metadata, address, contact email, class range, and senior subjects.
+    3. `view-school-users`: Staff user management roster table.
+    4. `view-sessions`: Active device session monitor scoped to this school.
+    5. `view-student-list`: Mobile/PWA student card roster with class, gender, category filters, and live search.
+    6. `view-student-detail`: Comprehensive student profile showing basic info, parent/guardian info, and dataset-specific identifiers.
+    7. `view-student-data`: Modular student roster ingestion placeholder.
+    Contains Modals: Add School User (`modal-add-school-user`), Edit School Information (`modal-edit-school-info`), User Details & Permissions (`modal-edit-user-perms`).
+- `admin/index.html`
+  - Purpose: Dedicated login portal for the Master Super Administrator.
+  - Connections: Links to `css/admin-login.css` and imports `js/admin/login.js`. Contains protocol warning banner for local `file:///` detection, master email and password inputs.
+- `admin/dashboard.html`
+  - Purpose: Centralized Super Administrator management console.
+  - Connections: Links to `css/dashboard.css` and imports `js/admin/dashboard.js`. Contains 6 major views:
+    1. `view-dashboard`: 4-card metric strip (Total Schools, Active Schools, Inactive Schools, Active Sessions) and Schools Directory table.
+    2. `view-schools`: Full schools directory with search and quick actions.
+    3. `view-school-details`: Deep institutional view with 5 secondary sub-tabs:
+       - Tab 1: Primary School Account (account details, status, device limits, permissions)
+       - Tab 2: School Information (campus address, class range, offered senior subjects, logo URL)
+       - Tab 3: Additional School Users (table of staff users with permission managers)
+       - Tab 4: Active Connected Sessions (live devices for this school)
+       - Tab 5: Student Data Module (dataset placeholder)
+    4. `view-accounts`: Directory of all configured Firebase UID accounts categorized by type (School Account vs User Account).
+    5. `view-sessions`: System-wide active connected device session monitor with school filter dropdown and force-logout controls.
+    6. `view-settings`: Super Admin Profile, current device session status, and real-time Firestore Administrative Audit Log table.
+    Contains Modals: Add Existing Account (`modal-add-account`), Edit School (`modal-edit-school`), User Permissions & Device Limit (`modal-edit-user-perms`), Danger Zone Delete School (`modal-delete-school`), Confirm Deactivate School (`modal-confirm-deactivate-school`).
+- `js/firebase.js`
+  - Purpose: Central singleton initializing Firebase App, Firebase Auth, and Cloud Firestore. Sets `browserLocalPersistence` and re-exports core modular SDK functions.
+- `js/school-config.js`
+  - Purpose: Canonical school configuration engine. Contains `CANONICAL_CLASSES` (15 classes from Nursery [rank 0] to Class 12 [rank 14]), `STANDARD_SENIOR_SUBJECTS` (17 senior stream subjects), class ranking calculation, range validation, and senior class detection.
+- `js/offline-store.js`
+  - Purpose: IndexedDB local storage engine (`SchoolPortalOfflineDB` v1). Manages two object stores: `cache` (stores Firestore documents with TTL/timestamp) and `pendingQueue` (stores offline set/update/delete operations with FIFO execution upon reconnection). Includes localStorage fallback.
+- `js/image-resolver.js`
+  - Purpose: Google Drive URL resolution and school logo renderer. Automatically extracts file IDs from various Google Drive link formats, provides multi-tier fallback URLs, caches resolved URLs in IndexedDB, and falls back to `icon.svg` and letter initials.
+- `js/session-manager.js`
+  - Purpose: Inactivity lifecycle and session synchronization manager. Implements:
+    - 24-hour genuine user inactivity tracking stored in localStorage (`portal_last_activity`), throttled to 15-second intervals.
+    - Global online/offline network monitor with visual topbar status badge.
+    - Offline pending operation queue synchronization to Firestore.
+    - Authoritative session verification against Firestore upon reconnection.
+    - Enforces Per-User Session Retention: limits stored session records to the newest 3 per user, physically deleting older records from Firestore.
+    - Explicit logout and forced logout handlers.
+- `js/admin/login.js`
+  - Purpose: Super Admin login controller. Verifies email/password and enforces strict hardcoded Super Admin UID check (`SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2"`).
+- `js/admin/dashboard.js`
+  - Purpose: Super Admin dashboard bootstrap. Verifies ongoing auth state, asserts Super Admin UID guard, binds 24-hour inactivity tracker, and triggers `initSuperAdminUI()`.
+- `js/admin/firestore-service.js`
+  - Purpose: Data access layer for Super Admin operations. Implements real-time subscriptions (`subscribeToSchools`, `subscribeToUsers`, `subscribeToSessions`, `subscribeToAdminLogs`), school/account creation (`saveSchoolWithAccount`, `saveUserAccount`), status toggles with immediate cascading session termination, and audit log generation (`logAdminAction`).
+- `js/admin/superadmin-ui.js`
+  - Purpose: Super Admin single-page view router, DOM renderer, modal manager, form submission handler, and reactive UI updater.
+- `js/school/dashboard.js`
+  - Purpose: School Portal dashboard bootstrap. Checks local cache for instant offline startup, fetches authoritative user and school records, registers new active device session in Firestore, maintains 60-second online heartbeat, and sets up real-time snapshot listeners for instant forced logout if the school or user is deactivated.
+- `js/school/school-ui.js`
+  - Purpose: School Portal single-page view router and DOM renderer. Handles view switching, metric calculations, user permissions editing, modal forms, manual sync trigger, and binds student dataset exploration.
+- `js/school/student-service.js`
+  - Purpose: Multi-dataset management engine for School Portal. Generates and caches synthetic student records across 3 datasets (`school_data`, `udise`, `three_point_zero`), computes class/gender/category distributions, and performs fast in-memory filtering and multi-field search.
+- `js/user/login.js`
+  - Purpose: School Portal login controller. Authenticates email/password, retrieves `users/{uid}`, verifies associated `schoolId` and active status, enforces concurrent device limit against active Firestore sessions, invalidates prior sessions from the same device, registers a new session document, enforces the 3-session retention policy, and redirects to `dashboard.html`.
+
+================================================================================
+4. APPLICATION FLOW — END TO END
+================================================================================
+
+1. Initial Application Load:
+   - User opens either the root URL (`./index.html`) or Admin URL (`./admin/index.html`).
+   - Browser evaluates import maps and loads native ES modules.
+   - `js/firebase.js` initializes the Firebase App singleton and sets auth persistence to `browserLocalPersistence`.
+2. Routing & Entry Portals:
+   - Static multi-page routing handled via separate HTML files:
+     - School Portal Login: `index.html`
+     - School Portal Dashboard: `dashboard.html`
+     - Super Admin Login: `admin/index.html`
+     - Super Admin Dashboard: `admin/dashboard.html`
+   - Internal tab/view switching on both dashboards is executed via client-side DOM manipulation (toggling `.active` classes on `<section>` views and `<button>` navigation elements) without full page reloads.
+3. Login Screen Execution:
+   - For School Users (`index.html`): Form `#school-login-form` receives Login ID/Email and Password.
+   - For Super Admin (`admin/index.html`): Form `#login-form` receives Master Admin Email and Password.
+4. Authentication:
+   - Calling `signInWithEmailAndPassword(auth, email, password)`.
+   - On failure: Maps Firebase error codes (`auth/invalid-credential`, `auth/user-disabled`, etc.) to clear human-readable alerts.
+5. User Verification:
+   - In School Login (`js/user/login.js`):
+     - Checks `users/{uid}` in Cloud Firestore.
+     - If document does not exist or lacks `schoolId`: Access is denied with "Access Denied: This account is not registered with any School Institution." and `signOut()` is executed.
+     - If `userData.status === "Inactive"`: Login is rejected with "Your school account has been deactivated."
+     - Verifies `schools/{schoolId}`: If `schoolData.status === "Inactive"`, login is rejected with "This School Institution is currently inactive."
+   - In Super Admin Login (`js/admin/login.js`):
+     - Validates that `user.uid === "FSe6FQsJrKaDVqqjcO4jv2EIkfp2"`. If UID does not match, sign-out is triggered and access is denied.
+6. Role Detection & Account Level Hierarchy:
+   - Level 1: Master Super Admin (Identified strictly by UID `FSe6FQsJrKaDVqqjcO4jv2EIkfp2`). Full system control over all schools, accounts, sessions, and settings.
+   - Level 2: Primary School Account (Document in `users/{uid}` with `type: "school"`, associated with `schoolId`). Represents the institution itself, possesses institution-wide administrative permissions, and can edit school metadata.
+   - Level 3: Additional School User (Document in `users/{uid}` with `type: "user"`, associated with `schoolId`). Represents a teacher/staff member with individualized permissions.
+7. Admin Flow:
+   - Super Admin lands on `admin/dashboard.html`.
+   - `js/admin/dashboard.js` confirms auth state and UID match.
+   - Firestore listeners attach to `schools`, `users`, `sessions`, and `admin_logs`.
+   - Admin can view overall metrics, browse schools, drill into School Details (5 sub-tabs), edit campus information, manage accounts, configure device limits and permissions, monitor live sessions across all schools, force-terminate sessions, activate/deactivate schools, and view real-time audit logs.
+8. Normal School-User Flow:
+   - Authenticated user is redirected to `dashboard.html`.
+   - `js/school/dashboard.js` reads cached user and school data from IndexedDB for instant UI rendering.
+   - Verifies device session and registers active session in Firestore.
+   - Initializes 24-hour inactivity monitor and network connectivity listener.
+   - Starts a 60-second periodic heartbeat updating `sessions/{sessionId}.lastActive`.
+   - Real-time snapshot listeners attach to the session document, user document, and school document to catch administrative revocation instantly.
+9. Dashboard Loading:
+   - School Portal UI (`js/school/school-ui.js`) renders school branding (name, unique ID, logo via `image-resolver.js`).
+   - `student-service.js` loads or generates dataset records for `school_data`, `udise`, and `three_point_zero`.
+   - Computes total records, class strength breakdown, gender ratio, and caste categories (GEN, OBC, SC, ST).
+10. Database Reads:
+    - Schools: `schools/{schoolId}` (metadata, class range, subjects, logo URL, status).
+    - Users: `users/{uid}` (account profile, school linkage, permissions, device limit, status).
+    - Sessions: `sessions` query where `schoolId == currentSchoolId` and `status == "active"`.
+    - Local Cache: Reads from IndexedDB `SchoolPortalOfflineDB` (`cache` store).
+11. Database Writes:
+    - Enrolling/updating school: `setDoc(doc(db, "schools", schoolId), ...)`
+    - Updating primary school account or user: `setDoc(doc(db, "users", uid), ...)`
+    - Registering session: `setDoc(doc(db, "sessions", sessionId), ...)`
+    - Heartbeat: `updateDoc(doc(db, "sessions", sessionId), { lastActive: serverTimestamp() })`
+    - Terminating session: `updateDoc(doc(db, "sessions", sessionId), { status: "terminated", logoutTime: serverTimestamp() })`
+    - Logging audit: `setDoc(doc(adminLogsCol), ...)`
+    - Deleting school: `deleteDoc(doc(db, "schools", schoolId))` and `deleteDoc(doc(db, "users", schoolUid))`
+    - Offline fallback: Writes to IndexedDB `pendingQueue` when offline.
+12. Data Displayed on Screen:
+    - Institutional header (School Name, ID, Logo, status badge).
+    - Dataset selector buttons and count pills.
+    - Class-wise student distribution cards with click-to-filter capability.
+    - Gender comparison bar (Boys vs Girls percentages and counts).
+    - Category distribution cards (GEN, OBC, SC, ST).
+    - Filtered Student List feed with search input.
+    - Student profile modal/view displaying basic data, parent details, and registry IDs.
+    - Tables for School Users and Active Connected Sessions.
+13. Logout Flow:
+    - Explicit Logout: User clicks "Logout" -> `performExplicitLogout()` marks Firestore session as `status: "logged_out"`, clears `localStorage` and `sessionStorage`, wipes local IndexedDB cache via `clearOfflineCache()`, calls `signOut(auth)`, and redirects to `index.html`.
+    - Forced Logout / Revocation: Triggered by 24h inactivity, admin termination, or account/school deactivation -> `performForcedLogout()` signs out and redirects to `index.html?reason=force_logout` or `?reason=inactivity` displaying an informative alert banner.
+14. Error Handling:
+    - Authentication errors converted to user-friendly messages via `getFriendlyErrorMessage()`.
+    - Network drops automatically switch UI badge to "Offline (Working from local cache)".
+    - Failed Firestore writes offline are captured and stored in IndexedDB `pendingQueue`.
+15. Loading States:
+    - Fullscreen loaders (`#page-loader`) with spinners on initial page loads and transitions.
+    - Button spinners (`.btn-spinner`, `.spinner`, `.is-loading`) during form submissions.
+    - Topbar network badge showing "Syncing...", "Online", or "Offline".
+16. Protected Routes & Redirects:
+    - Unauthenticated visitors on `dashboard.html` or `admin/dashboard.html` are automatically redirected to `index.html` or `admin/index.html`.
+    - Non-admin users attempting to open `admin/dashboard.html` are explicitly signed out and redirected with "Access Denied".
+
+================================================================================
+5. AUTHENTICATION & AUTHORIZATION
+================================================================================
+
+- Login Provider: Firebase Authentication Email/Password.
+- Authentication Method: Direct client SDK call `signInWithEmailAndPassword(auth, email, password)`.
+- Session Persistence: Explicitly configured as `browserLocalPersistence` across all portals, ensuring login persists across browser tab closures and reloads until explicitly logged out or expired.
+- User IDs / UIDs: Standard Firebase Authentication UIDs (alphanumeric string generated by Firebase, e.g., `FSe6FQsJrKaDVqqjcO4jv2EIkfp2`).
+- 3-Tier Role Management Architecture:
+  1. Super Admin:
+     - Identification: Hardcoded Master UID `FSe6FQsJrKaDVqqjcO4jv2EIkfp2` verified in `js/admin/login.js`, `js/admin/dashboard.js`, and `js/admin/firestore-service.js`.
+     - Privileges: Unrestricted global access. Can create/edit/delete schools, add existing Firebase accounts, toggle operational status, configure permissions, modify device limits, force-logout sessions across any school, and inspect audit logs.
+  2. School Account (Primary Institutional Account):
+     - Identification: Record in `users/{uid}` where `type === "school"` and `schoolId` matches the school entity.
+     - Privileges: Primary owner of the school's data. Has full default permissions (editable: true, addStudent: true, deleteStudent: true, excelExport: true, reports: true). Can edit school profile metadata, class ranges, senior subjects, and manage additional school users.
+  3. School User Account (Staff / Operator):
+     - Identification: Record in `users/{uid}` where `type === "user"` and `schoolId` links to a specific school.
+     - Privileges: Granular permissions determined by boolean flags in `users/{uid}.permissions`:
+       - `editable` (boolean): Permission to edit student/school records.
+       - `addStudent` (boolean): Permission to register new students.
+       - `deleteStudent` (boolean): Permission to delete student records.
+       - `excelExport` (boolean): Permission to download records in Excel/CSV format.
+       - `reports` (boolean): Permission to view analytics and reports.
+- Device Limit & Concurrent Access Enforcement:
+  - Each account (`users/{uid}`) contains a configurable `deviceLimit` (integer, range 1 to 15, default: 3).
+  - During login in `js/user/login.js`:
+    1. The client queries Firestore: `sessions` collection where `userUid == user.uid` and `status == "active"`.
+    2. If `activeSessionsSnap.size >= deviceLimit`, login is BLOCKED immediately.
+    3. Firebase `signOut()` is called and the user receives the error: "Maximum device limit reached (X devices). Please log out from another device."
+    4. If within limits, a new session document (`SES_<timestamp>_<random>`) is created with `status: "active"`.
+- Real-Time Session Invalidation & Force Logout:
+  - While logged into `dashboard.html`, a real-time `onSnapshot` listener watches `sessions/{currentSessionId}`.
+  - If a Super Admin or School Admin terminates the session, `sessionData.status` changes to "terminated".
+  - The snapshot listener fires immediately, calls `performForcedLogout()`, clears client credentials, and redirects to login with an alert.
+  - Similar real-time listeners watch `users/{uid}` and `schools/{schoolId}` to force immediate logout if the account or school is marked "Inactive".
+- 24-Hour User Inactivity Expiration:
+  - Implemented via `js/session-manager.js`.
+  - Genuine user interaction events (`mousedown`, `keydown`, `touchstart`, `scroll`, `input`, `click`) update `localStorage.getItem("portal_last_activity")`, throttled to once every 15 seconds.
+  - Merely opening or reloading a browser tab does NOT refresh this timestamp.
+  - A background interval checks every 30 seconds: if `Date.now() - lastActive >= 24 * 60 * 60 * 1000` (24 hours), session expiration is triggered.
+- Session Retention Policy:
+  - To prevent unbounded accumulation of obsolete session documents in Cloud Firestore, `enforceUserSessionRetention(userUid, 3)` strictly retains only the newest 3 session records per user.
+  - Any 4th or older session documents for that specific UID are physically deleted from Firestore.
+  - Super Admin dashboard runs an additional routine `cleanupOldSessions()` purging any terminated/logged-out sessions older than 48 hours.
+- Custom Claims / Backend Verification:
+  - NOT VERIFIED / NOT FOUND IN PROJECT. Custom claims via Firebase Admin SDK are not used; role checks are performed client-side against Firestore document fields and the hardcoded Super Admin UID.
+
+================================================================================
+6. DATABASE ARCHITECTURE
+================================================================================
+
+- Database Type: Cloud Firestore (NoSQL Document-Oriented Database) supplemented by client-side IndexedDB for local caching.
+- Firebase Project ID: `school-data-portal-firebase`
+- Data Model Philosophy: Flat top-level collections with relational foreign keys (`schoolId`, `userUid`). Multi-tenant isolation is enforced logically via query filters (`where("schoolId", "==", currentSchoolId)`).
+
+--------------------------------------------------------------------------------
+COLLECTION: `schools`
+--------------------------------------------------------------------------------
+- Document ID: Canonical School ID (e.g., `SCHOOL001`, uppercase string).
+- Purpose: Authoritative institutional entity record containing school identity, campus metadata, and academic configuration.
+- Fields & Data Types:
+  - `schoolId` (string): Unique uppercase institutional identifier (e.g., "SCHOOL001"). Matches document ID.
+  - `name` (string): Official name of the school (e.g., "Springfield Public School").
+  - `schoolName` (string): Duplicate mirror of `name` for backwards compatibility.
+  - `firebaseUid` (string): Firebase Auth UID of the primary school account (Level 2).
+  - `adminEmail` (string): Contact/login email address for school administration.
+  - `phone` (string): Optional contact phone number for the school institution.
+  - `status` (string): "Active" | "Inactive". Controls whether institutional access is permitted.
+  - `address` (string): Physical campus address.
+  - `logoUrl` (string): Direct image URL or Google Drive link to the school's logo.
+  - `logoInitial` (string): 2-character uppercase initials used for fallback avatar (e.g., "SP").
+  - `startingClass` (string): Lowest grade offered (e.g., "Nursery", "Class 1").
+  - `endingClass` (string): Highest grade offered (e.g., "Class 10", "Class 12").
+  - `subjects` (array of strings): Senior secondary subjects offered (Class 11/12), e.g., ["Physics", "Chemistry", "Mathematics"].
+  - `usersCount` (number): Counter tracking additional user accounts enrolled under this school.
+  - `createdAt` (FieldValue serverTimestamp): Document creation timestamp.
+  - `updatedAt` (FieldValue serverTimestamp): Last modification timestamp.
+
+--------------------------------------------------------------------------------
+COLLECTION: `users`
+--------------------------------------------------------------------------------
+- Document ID: Firebase Authentication UID of the account (e.g., "USER_UID_101" or auto-generated Firebase UID).
+- Purpose: User profile, authentication linkage, role specification, device limits, and feature permissions.
+- Fields & Data Types:
+  - `uid` (string): Firebase Authentication UID. Matches document ID.
+  - `firebaseUid` (string): Duplicate mirror of `uid`.
+  - `type` (string): "school" (Primary School Account) | "user" (Additional School User Account).
+  - `schoolId` (string): Foreign key linking the user to a document in the `schools` collection (e.g., "SCHOOL001").
+  - `name` (string): Display name of the user.
+  - `displayName` (string): Full display title (e.g., "John Doe" or "Springfield Public School (Primary Account)").
+  - `email` (string): Authenticated login email address.
+  - `status` (string): "Active" | "Inactive". Inactive accounts are blocked at login and force-logged out.
+  - `deviceLimit` (number): Integer (1-15, default: 3) defining maximum allowable concurrent active sessions.
+  - `permissions` (map/object):
+    - `editable` (boolean): Right to edit records.
+    - `addStudent` (boolean): Right to add new students.
+    - `deleteStudent` (boolean): Right to delete students.
+    - `excelExport` (boolean): Right to export data.
+    - `reports` (boolean): Right to view analytics/reports.
+  - `createdAt` (FieldValue serverTimestamp): Document creation timestamp.
+  - `updatedAt` (FieldValue serverTimestamp): Last modification timestamp.
+
+--------------------------------------------------------------------------------
+COLLECTION: `sessions`
+--------------------------------------------------------------------------------
+- Document ID: Session Identifier (e.g., `SES_1725838491000_4821`).
+- Purpose: Real-time tracking of active and historical device logins for security enforcement, concurrent device limiting, and administrative revocation.
+- Fields & Data Types:
+  - `sessionId` (string): Unique session identifier. Matches document ID.
+  - `userUid` (string): Foreign key linking to `users` document UID.
+  - `userEmail` (string): Login email of the authenticated user.
+  - `userName` (string): Display name of the user.
+  - `schoolId` (string): Foreign key linking to `schools` collection ID.
+  - `deviceId` (string): Generated client device identifier (e.g., "DEV_4921").
+  - `deviceName` (string): Clean browser and OS descriptor (e.g., "Chrome on Windows", "Safari on iOS").
+  - `status` (string): "active" | "terminated" | "logged_out" | "expired".
+  - `loginTime` (FieldValue serverTimestamp): Timestamp when login occurred.
+  - `lastActive` (FieldValue serverTimestamp): Timestamp updated by the 60-second client heartbeat.
+  - `logoutTime` (FieldValue serverTimestamp or null): Timestamp when session ended.
+
+--------------------------------------------------------------------------------
+COLLECTION: `admin_logs`
+--------------------------------------------------------------------------------
+- Document ID: Auto-generated Firestore ID.
+- Purpose: System audit trail recording actions performed by Super Administrators.
+- Fields & Data Types:
+  - `action` (string): Action performed (e.g., "School Account Configured", "School Deactivated", "Session Force Logged Out").
+  - `target` (string): Target entity identifier (e.g., "Springfield Public School (SCHOOL001)").
+  - `details` (string): Specific parameters or outcome (e.g., "Status changed: Active -> Inactive (All active sessions revoked)").
+  - `admin` (string): Email of the acting Super Administrator.
+  - `adminUid` (string): UID of the acting Super Administrator.
+  - `timestamp` (FieldValue serverTimestamp): Server timestamp of the action.
+
+--------------------------------------------------------------------------------
+CLIENT-SIDE INDEXEDDB: `SchoolPortalOfflineDB` (Version 1)
+--------------------------------------------------------------------------------
+- Object Store 1: `cache`
+  - Key path: `key` (format: `<collectionName>_<docId>`)
+  - Indexes: `collection`, `updatedAt`
+  - Purpose: Persistent offline storage of Firestore documents and school datasets.
+  - Pseudo-collections stored:
+    - `schools`: Cached school documents.
+    - `users`: Cached user accounts.
+    - `sessions`: Cached session documents.
+    - `_logos`: Resolved and validated school logo URLs (7-day TTL).
+    - `students_sd_<schoolId>`: Internal School Data student records.
+    - `students_ud_<schoolId>`: National UDISE student records.
+    - `students_p3_<schoolId>`: State 3.0 Portal student records.
+- Object Store 2: `pendingQueue`
+  - Key path: `id` (auto-incrementing integer)
+  - Indexes: `collection`, `createdAt`
+  - Purpose: FIFO queue storing offline write operations `{ collection, docId, action, payload, createdAt, attempts }` that automatically sync to Cloud Firestore when internet connectivity resumes.
+
+--------------------------------------------------------------------------------
+CONCEPTUAL DATA MODEL & RELATIONSHIPS
+--------------------------------------------------------------------------------
+
+Super Admin (Master UID: FSe6FQsJrKaDVqqjcO4jv2EIkfp2)
+  │
+  ├── Manages → [schools] (Document ID: schoolId)
+  │               │
+  │               ├── Has Primary Account → [users] (type: "school", uid: firebaseUid, schoolId)
+  │               │
+  │               ├── Has Staff Accounts  → [users] (type: "user", uid: firebaseUid, schoolId)
+  │               │
+  │               ├── Has Connected Live Devices → [sessions] (schoolId, userUid, status: "active")
+  │               │
+  │               └── Has Student Datasets (In-Memory & IndexedDB Cache)
+  │                     ├── Dataset 1: School Data (Internal records, Scholar No, Roll No, Samagra ID)
+  │                     ├── Dataset 2: UDISE (National registry, PEN No, UDISE ID, Aadhar mask)
+  │                     └── Dataset 3: 3.0 (State portal, Samagra Family/Member IDs)
+  │
+  └── Generates → [admin_logs] (Audit log of all institutional modifications)
+
+================================================================================
+7. FIREBASE CONFIGURATION & CONNECTIONS
+================================================================================
+
+- Firebase Initialization File: `js/firebase.js`
+- Configuration Object:
+  - apiKey: [REDACTED_API_KEY - Stored in js/firebase.js as "AIzaSyAQHZaufTvr0M4KdIX1D8RFT4DKDTbl60k"]
+  - authDomain: "school-data-portal-firebase.firebaseapp.com"
+  - projectId: "school-data-portal-firebase"
+  - storageBucket: "school-data-portal-firebase.firebasestorage.app"
+  - messagingSenderId: "996757871332"
+  - appId: "1:996757871332:web:372f87136d39e2b8e2eaf1"
+  - measurementId: "G-NR75D6CDF7"
+- Initialization Mechanism:
+  ```javascript
+  const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  setPersistence(auth, browserLocalPersistence);
+  ```
+- Firebase Hosting Configuration:
+  - NOT VERIFIED / NOT FOUND IN PROJECT. No `firebase.json` or `.firebaserc` file exists in the repository root.
+- Firebase Security Rules & Indexes:
+  - NOT VERIFIED / NOT FOUND IN PROJECT. No `firestore.rules` or `firestore.indexes.json` file is present in the repository. Rules are managed directly in the Firebase Console.
+- Firebase Functions:
+  - NOT FOUND. No cloud functions or serverless backend code exists.
+
+================================================================================
+8. FRONTEND ARCHITECTURE
+================================================================================
+
+- Architecture Style: Multi-Page Application (MPA) at the routing level with Single-Page Application (SPA) view switching within each portal.
+- Main Pages & Routes:
+  1. `/index.html` (School Portal Login)
+  2. `/dashboard.html` (School Portal Dashboard)
+  3. `/admin/index.html` (Super Admin Login)
+  4. `/admin/dashboard.html` (Super Admin Control Panel)
+
+--------------------------------------------------------------------------------
+PORTAL 1: SUPER ADMIN DASHBOARD (`admin/dashboard.html` + `js/admin/superadmin-ui.js`)
+--------------------------------------------------------------------------------
+- Layout: Modern SaaS sidebar navigation (desktop) + bottom navigation bar (mobile) + persistent top bar + dynamic content viewports + modal overlays + toast notifications.
+- Views & Access: Restricted exclusively to Super Admin (`SUPER_ADMIN_UID`).
+  1. `dashboard`: Displays 4 metric cards (Total Schools, Active Schools, Inactive Schools, Active Sessions) and quick search directory of schools.
+  2. `schools`: Dedicated full-directory table of registered institutions with search, status badges, device counts, and "Add School Account" button.
+  3. `school-details`: Institutional management suite with 5 secondary sub-tabs:
+     - Sub-Tab 1 (School Account): Displays primary school credentials, status, concurrent device limit stepper, and permission toggles.
+     - Sub-Tab 2 (School Information): Campus address, configured class range (Nursery to Class 12), senior subjects list, and logo URL.
+     - Sub-Tab 3 (School Users): Table of staff users under this school with "+ Add User" and "Manage User" actions.
+     - Sub-Tab 4 (Active Sessions): Table of live connected sessions for this school with "Force Logout" action.
+     - Sub-Tab 5 (Student Data): Prepared module card for student ingestion.
+  4. `accounts`: Directory of all configured Firebase accounts categorized as Primary School Account or School User Account with active device metrics.
+  5. `sessions`: Real-time cross-institutional session monitor with a school filter dropdown and instant session termination buttons.
+  6. `settings`: Super Admin profile card, current device session status, and administrative audit log table with live search.
+- Modals:
+  - `#modal-add-account`: Dual-type account form (Type 1: School Account [with school metadata, class range, subjects, device limit]; Type 2: School User Account [with school selector, user UID, display name, email, device limit, permissions]).
+  - `#modal-edit-school`: Edit school name, logo URL, email, address, class range, and senior subjects.
+  - `#modal-edit-user-perms`: Configure user status (Active/Inactive), concurrent device limit stepper, and toggle permissions.
+  - `#modal-delete-school`: Danger zone confirmation modal for permanent deletion of school and account records.
+  - `#modal-confirm-deactivate-school`: Two-step warning modal confirming school deactivation and cascading session revocation.
+
+--------------------------------------------------------------------------------
+PORTAL 2: SCHOOL PORTAL DASHBOARD (`dashboard.html` + `js/school/school-ui.js`)
+--------------------------------------------------------------------------------
+- Layout: Sidebar navigation + top bar with live network status indicator ("Online", "Offline", "Syncing") and "Sync Data" manual trigger + main content area.
+- Views & Access: Accessible to authenticated School Accounts and School Users.
+  1. `view-dashboard`:
+     - Dataset Comparison Strip: 3 balanced cards showing total student records across School Data, UDISE, and 3.0.
+     - Selected Dataset Hero Summary: Active dataset badge, student count, "Explore List" button, and fast search bar.
+     - Class-Wise Student Strength: Grid of cards representing grades (e.g., Nursery to Class 10/12) showing student counts. Clicking any class card immediately opens the student roster filtered to that grade.
+     - Gender Distribution: Split visual progress bar (Boys vs Girls percentages) and clickable filter cards.
+     - Category Distribution: 4-column layout for caste categories (GEN, OBC, SC, ST) with counts and click-to-filter support.
+  2. `view-school-info`: View and edit campus address, contact email, class ranges, senior subjects, and school logo.
+  3. `view-school-users`: Roster table of staff members showing name, email, account status, device limits, active devices, and permissions. Includes "+ Add User" modal.
+  4. `view-sessions`: Real-time table of live connected devices scoped strictly to this school, with device names, login times, and "Force Logout" actions.
+  5. `view-student-list`: Mobile-first responsive card feed of students with search bar, class dropdown, gender dropdown, and category dropdown. Clicking any card opens the detailed profile.
+  6. `view-student-detail`: Comprehensive profile view featuring basic information (name, DOB, gender, class/section, roll no, scholar no, admission date), parent/guardian details (father, mother, contact, address), and dataset-specific registry IDs (Samagra ID, PAN No, PEN No, UDISE ID, Aadhar mask).
+  7. `view-student-data`: Roster module ready placeholder.
+- Modals:
+  - `#modal-add-school-user`: Form for adding staff members with UID, email, status, device limit, and permissions.
+  - `#modal-edit-school-info`: Form for updating campus details, class range, and senior subjects.
+  - `#modal-edit-user-perms`: Modal for adjusting staff status, device limits, and permissions.
+
+================================================================================
+9. BACKEND / API ARCHITECTURE
+================================================================================
+
+- Backend Server: NO BACKEND SERVER EXISTS.
+- Framework / Runtime: None. There is no Express.js, Fastify, Django, Flask, FastAPI, Spring Boot, or ASP.NET server.
+- API Endpoints / Routes: None. No REST or GraphQL endpoints are hosted by this project.
+- Communication Model: Direct Frontend-to-Firebase Modular SDK over secure WebSockets / HTTPS (`https://firestore.googleapis.com/` and `https://identitytoolkit.googleapis.com/`).
+- External Services:
+  - Google Identity Toolkit (Firebase Auth)
+  - Google Cloud Firestore REST/gRPC Streaming Engine
+  - Google Drive Thumbnail & Content CDN
+  - Google Fonts CDN
+- Environment Variables:
+  - None configured in the repository (no `.env`, `.env.example`, or `.env.local` files). Firebase credentials are hardcoded into `js/firebase.js`.
+
+================================================================================
+10. SCHOOL MANAGEMENT MODULE
+================================================================================
+
+- Status: IMPLEMENTED and fully functional in both Super Admin and School Portal.
+- Implementation Files:
+  - UI: `admin/dashboard.html`, `dashboard.html`, `js/admin/superadmin-ui.js`, `js/school/school-ui.js`
+  - Data Service: `js/admin/firestore-service.js`, `js/school-config.js`, `js/image-resolver.js`
+  - Storage: Cloud Firestore collection `schools` and IndexedDB cache.
+- School Creation & Identity:
+  - Created via Super Admin "Configure Existing Account" modal.
+  - Generates document `schools/{schoolId}` and primary account `users/{firebaseUid}`.
+  - School Unique ID format: Uppercase alphanumeric string (e.g., `SCHOOL001`, `DPS01`). Serves as the primary foreign key across users, sessions, and student data.
+- Metadata Fields Managed:
+  - School Name (`name` / `schoolName`)
+  - Primary Contact Email (`adminEmail`)
+  - Campus Address (`address`)
+  - School Logo URL (`logoUrl`) with dynamic preview and Google Drive conversion
+  - Operating Status (`status`: "Active" | "Inactive")
+  - Starting Class (`startingClass`) & Ending Class (`endingClass`)
+  - Senior Subjects (`subjects`: array of strings)
+  - Enrolled Users Count (`usersCount`)
+- Academic Class Range Engine:
+  - Centralized in `js/school-config.js`.
+  - Canonical 15-class hierarchy: Nursery (rank 0) through Class 12 (rank 14).
+  - Validation ensures ending class rank >= starting class rank.
+  - Automatic detection of Senior Secondary classes (Class 11 or 12). When selected, dynamically displays a senior subject checklist (Physics, Chemistry, Mathematics, Biology, Accountancy, Economics, Computer Science, etc.) with custom subject addition.
+- Cascading Status Toggling:
+  - When a school is deactivated in `toggleSchoolStatus()`:
+    1. `schools/{schoolId}.status` is set to "Inactive".
+    2. Primary account `users/{firebaseUid}.status` is set to "Inactive".
+    3. `terminateSchoolSessions(schoolId)` immediately terminates all active sessions in the `sessions` collection.
+    4. Connected clients receive the status change in real time via Firestore snapshot listeners and are force-logged out.
+
+================================================================================
+11. FEES / FEE PORTAL
+================================================================================
+
+- Fees Portal Status: PLANNED / NOT YET IMPLEMENTED.
+- Evidence Found in Project:
+  - No database collections, schemas, functions, or UI views currently exist for tuition fees, payment gateways, receipts, ledger balances, or fee concessions.
+  - The permission flag `reports` in `users/{uid}.permissions` exists for future expansion to fee and student analytics.
+
+================================================================================
+12. REPORTING & PDF SYSTEM
+================================================================================
+
+- Reporting & PDF Status: PARTIALLY IMPLEMENTED (Analytics & visual metrics implemented; PDF generation and Excel export files are PLANNED).
+- Currently Implemented Reporting Features:
+  - Live Dashboard Student Analytics in `js/school/student-service.js`:
+    - Class-wise student strength counter and percentage calculations.
+    - Real-time gender breakdown (Boys count, Girls count, percentage progress bar).
+    - Caste category distribution (GEN, OBC, SC, ST metrics).
+    - Cross-dataset record count comparisons (School Data vs UDISE vs 3.0).
+  - Administrative Audit Reports in `js/admin/firestore-service.js`:
+    - Chronological administrative audit log tracking all school activations, deactivations, user edits, session revocations, and deletions.
+- Planned Reporting Features:
+  - Native PDF report generation (Student identity cards, class rosters, summary reports).
+  - Client-side Excel/CSV spreadsheet export (Permission toggle `excelExport` is present in the UI and database, but export generation library such as SheetJS/xlsx is not yet installed).
+
+================================================================================
+13. DATA FLOW MAP
+================================================================================
+
+1. USER ACTION: LOGIN (School Portal)
+   - FRONTEND COMPONENT: `index.html` (`#school-login-form`)
+   - FUNCTION / SERVICE: `js/user/login.js` -> `signInWithEmailAndPassword(auth, email, password)`
+   - AUTH CHECK: Firebase Authentication verifies credentials; checks `users/{uid}` for `schoolId` and `status === "Active"`; checks `schools/{schoolId}` for `status === "Active"`.
+   - DATABASE READ: `getDoc(doc(db, "users", uid))` and `getDoc(doc(db, "schools", schoolId))`
+   - DEVICE CHECK: Queries `sessions` where `userUid == uid` and `status == "active"`. Verifies count < `deviceLimit`.
+   - DATABASE WRITE: `setDoc(doc(db, "sessions", sessionId), ...)` registering active session; calls `enforceUserSessionRetention(uid, 3)` to delete 4th+ older sessions.
+   - STATE UPDATE: Writes `current_session_id` and `portal_last_activity` to `localStorage`.
+   - UI: Browser redirects via `window.location.replace("./dashboard.html")`.
+
+2. USER ACTION: LOADING SCHOOL DASHBOARD
+   - FRONTEND COMPONENT: `dashboard.html` (`#page-loader`)
+   - FUNCTION / SERVICE: `js/school/dashboard.js` (`onAuthStateChanged`)
+   - AUTH CHECK: Validates `auth.currentUser`.
+   - LOCAL CACHE READ: `getDocFromCache("users", uid)` and `getDocFromCache("schools", schoolId)` from IndexedDB for zero-latency startup.
+   - DATABASE READ: Online read `getDoc()` updates cache; real-time listeners attach to `sessions/{sessionId}`, `users/{uid}`, `schools/{schoolId}`.
+   - DATASET LOAD: `student-service.js` -> `loadSchoolDatasets()` reads cached datasets or generates seeds.
+   - UI: Renders school header info, dataset comparison cards, class strength grid, gender bar, and category breakdown. Page loader hides.
+
+3. USER ACTION: SWITCHING DATASET (School Data <-> UDISE <-> 3.0)
+   - FRONTEND COMPONENT: `dashboard.html` (`#dataset-selector` or `.dataset-compare-card`)
+   - FUNCTION / SERVICE: `js/school/school-ui.js` -> `switchDataset(datasetKey)`
+   - STATE UPDATE: `activeDataset = datasetKey`
+   - CALCULATION: `calculateDatasetAnalytics(activeDataset)`
+   - UI: Re-renders dataset tag, student count, class strength grid, gender distribution bar, and category cards.
+
+4. USER ACTION: FILTERING & EXPLORING STUDENTS
+   - FRONTEND COMPONENT: `dashboard.html` (`#explore-search-input`, `#filter-class-select`, `.class-card`, `.gender-card`, `.category-card`)
+   - FUNCTION / SERVICE: `js/school/school-ui.js` -> `openStudentListView()` -> `renderStudentListCards()`
+   - CALCULATION: `filterStudents(datasetKey, filters)` filters in-memory array by student name, father name, roll no, scholar no, class, gender, and caste.
+   - UI: View switches to `#view-student-list`; renders student cards feed with avatar initials and metadata pills.
+
+5. USER ACTION: VIEWING STUDENT DETAIL
+   - FRONTEND COMPONENT: `dashboard.html` (`.student-card`)
+   - FUNCTION / SERVICE: `js/school/school-ui.js` -> `openStudentDetailView(studentId)`
+   - LOOKUP: `getStudentById(activeDataset, studentId)`
+   - UI: View switches to `#view-student-detail`; renders profile banner, basic info fields, parent info fields, and dataset-specific identifiers (PEN, Samagra, UDISE, PAN).
+
+6. USER ACTION: ADDING A SCHOOL USER (Staff)
+   - FRONTEND COMPONENT: `dashboard.html` (`#modal-add-school-user`)
+   - FUNCTION / SERVICE: `js/school/school-ui.js` -> `setupSchoolForms()`
+   - DATABASE WRITE: `setDoc(doc(db, "users", newUid), ...)` with permissions and device limits. Increments `schools/{schoolId}.usersCount`.
+   - OFFLINE QUEUE: If offline, enqueues to IndexedDB `pendingQueue`.
+   - STATE UPDATE: Caches new user in IndexedDB; pushes to `liveSchoolUsers`.
+   - UI: Closes modal; displays toast "School User saved successfully!"; updates users table.
+
+7. USER ACTION: EDITING SCHOOL INFORMATION
+   - FRONTEND COMPONENT: `dashboard.html` (`#modal-edit-school-info`) or Super Admin (`#modal-edit-school`)
+   - FUNCTION / SERVICE: `js/school/school-ui.js` -> `updateDoc(doc(db, "schools", schoolId), ...)`
+   - OFFLINE QUEUE: If offline, enqueues to IndexedDB `pendingQueue`.
+   - STATE UPDATE: Updates cached school document.
+   - UI: Closes modal; re-renders school info view; updates logo via `image-resolver.js`.
+
+8. USER ACTION: FORCE TERMINATING A SESSION (Admin Action)
+   - FRONTEND COMPONENT: `admin/dashboard.html` or `dashboard.html` (`.btn-danger-outline` on session row)
+   - FUNCTION / SERVICE: `firestore-service.js` -> `terminateSession(sessionId)`
+   - DATABASE WRITE: `updateDoc(doc(db, "sessions", sessionId), { status: "terminated", logoutTime: serverTimestamp() })`
+   - AUDIT: Writes entry to `admin_logs`.
+   - REMOTE TRIGGER: Target user's browser `onSnapshot` detects `status !== "active"`.
+   - REMOTE RESPONSE: Target user's browser triggers `performForcedLogout()`, wipes credentials, and redirects to `index.html?reason=force_logout`.
+   - UI: Session row updates to terminated or disappears from active table.
+
+9. USER ACTION: EXPLICIT LOGOUT
+   - FRONTEND COMPONENT: Logout button in sidebar
+   - FUNCTION / SERVICE: `js/session-manager.js` -> `performExplicitLogout()`
+   - DATABASE WRITE: Updates session status to "logged_out".
+   - CACHE PURGE: Clears IndexedDB cache via `clearOfflineCache()`. Clears `localStorage` and `sessionStorage`.
+   - AUTH: Calls `signOut(auth)`.
+   - UI: Redirects to `./index.html`.
+
+================================================================================
+14. SECURITY ARCHITECTURE
+================================================================================
+
+- Authentication Layer: Firebase Authentication Email/Password with client persistence set to `browserLocalPersistence`.
+- Role-Based Access Control (RBAC):
+  - Super Admin: Hardcoded UID check (`SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2"`).
+  - School Accounts: Document check in `users/{uid}` matching `type === "school"`.
+  - School Users: Document check in `users/{uid}` matching `type === "user"`.
+- School-Level Data Isolation:
+  - Handled at query level: School dashboard queries filter strictly by `where("schoolId", "==", currentSchoolId)`.
+  - Offline IndexedDB caching prefixes student datasets with `schoolId` (e.g., `students_sd_SCHOOL001`).
+- Active Device Session Limiting:
+  - Login queries existing active sessions and blocks authentication if active count >= `deviceLimit`.
+  - Client heartbeat continuously monitors and reports device state.
+- Inactivity Security:
+  - Client automatically expires credentials and executes forced logout after 24 hours of user inactivity.
+- Sensitive Data Handling:
+  - Passwords are never stored in Firestore; authentication credentials are submitted directly to Firebase Auth.
+  - Secret API keys are not exposed in plaintext reports.
+
+--------------------------------------------------------------------------------
+SECURITY ISSUES / RECOMMENDATIONS AUDIT:
+--------------------------------------------------------------------------------
+1. SECURITY ISSUE / RECOMMENDATION: Hardcoded Super Admin UID
+   - Current State: `SUPER_ADMIN_UID = "FSe6FQsJrKaDVqqjcO4jv2EIkfp2"` is hardcoded across multiple frontend JavaScript files (`login.js`, `dashboard.js`, `firestore-service.js`).
+   - Risk: Any user who modifies local JavaScript in browser developer tools could bypass client-side checks if Firestore security rules do not independently enforce this UID on the database layer.
+   - Recommendation: Deploy Cloud Functions to issue Firebase Custom Claims (e.g., `{ superadmin: true }`) and enforce them in server-side `firestore.rules`.
+2. SECURITY ISSUE / RECOMMENDATION: Client-Enforced Device Limits
+   - Current State: Device limit checks occur on the client before creating a session document.
+   - Risk: A malicious user could bypass the client-side check by calling the Firestore SDK directly in the browser console.
+   - Recommendation: Implement a Firebase Cloud Function (or Firestore Security Rule with transaction/aggregation query) to validate device limits authoritatively on write.
+3. SECURITY ISSUE / RECOMMENDATION: Firestore Security Rules Not In Repo
+   - Current State: No `firestore.rules` file is tracked in the repository.
+   - Risk: Database collections could be vulnerable to unauthorized read/write operations if default public rules are active in the Firebase Console.
+   - Recommendation: Commit a robust `firestore.rules` file defining strict multi-tenant isolation:
+     - Allow read/write to `schools/{schoolId}` only if `request.auth.uid == resource.data.firebaseUid` or user belongs to school.
+     - Allow read/write to `users/{uid}` only for the authenticated owner or Super Admin.
+     - Restrict `admin_logs` to Super Admin writes.
+4. SECURITY ISSUE / RECOMMENDATION: Public Firebase Web Config
+   - Current State: Firebase config (`apiKey`, `projectId`, `appId`) is committed in `js/firebase.js`.
+   - Note: In Firebase architecture, web configuration values are inherently public; however, Firestore Security Rules and App Check MUST be configured to restrict API usage to legitimate client origins.
+
+================================================================================
+15. CURRENT IMPLEMENTATION STATUS
+================================================================================
+
+FEATURE / MODULE               | STATUS                 | IMPLEMENTATION LOCATION                           | NOTES
+-------------------------------|------------------------|---------------------------------------------------|---------------------------------------------
+Super Admin Login              | IMPLEMENTED            | admin/index.html, js/admin/login.js               | Hardcoded UID guard, error mapping
+Super Admin Dashboard          | IMPLEMENTED            | admin/dashboard.html, js/admin/superadmin-ui.js   | 6 major views, responsive drawer & bottom nav
+School Creation & Management   | IMPLEMENTED            | js/admin/firestore-service.js                     | Full CRUD, class range, senior subjects
+School Account Separation      | IMPLEMENTED            | js/admin/firestore-service.js, users collection   | 3-level account hierarchy (Admin, School, User)
+School Portal Login            | IMPLEMENTED            | index.html, js/user/login.js                      | Account verification, school check, device limit
+School Portal Dashboard        | IMPLEMENTED            | dashboard.html, js/school/school-ui.js            | 7 views, branding, responsive layout
+Multi-Dataset Engine           | IMPLEMENTED            | js/school/student-service.js                      | 3 datasets: School Data, UDISE, 3.0
+Student Dashboard Analytics    | IMPLEMENTED            | js/school/student-service.js, dashboard.html      | Class strength, gender ratio, categories
+Student List & Filter Cards    | IMPLEMENTED            | js/school/school-ui.js, dashboard.html            | Fast search, multi-dropdown filter
+Student Detail Profile View    | IMPLEMENTED            | js/school/school-ui.js, dashboard.html            | Basic info, parent details, registry IDs
+Active Device Tracking         | IMPLEMENTED            | js/session-manager.js, sessions collection        | Real-time session monitoring & heartbeat
+Device Limit Enforcement       | IMPLEMENTED            | js/user/login.js, sessions collection             | Configurable 1-15 device limit per user
+Administrative Force Logout    | IMPLEMENTED            | js/admin/firestore-service.js, dashboard.js       | Real-time snapshot listener instant logout
+Session Retention Cleanup      | IMPLEMENTED            | js/session-manager.js, firestore-service.js       | Enforces max 3 newest sessions per user
+24-Hour Inactivity Expiration  | IMPLEMENTED            | js/session-manager.js                             | Throttled interaction tracking, persists reload
+Network Online/Offline Monitor | IMPLEMENTED            | js/session-manager.js, school-ui.js               | Topbar status badge with automatic reconnection
+IndexedDB Offline Store        | IMPLEMENTED            | js/offline-store.js                               | Document cache & FIFO pending sync queue
+Google Drive Logo Resolver     | IMPLEMENTED            | js/image-resolver.js                              | Multi-tier fallback, CDN URLs, offline caching
+Class Range & Subject Engine   | IMPLEMENTED            | js/school-config.js                               | Canonical 15-class hierarchy & senior subjects
+Administrative Audit Log       | IMPLEMENTED            | admin_logs collection, superadmin-ui.js           | Full administrative action tracking
+PWA Web App Manifests          | IMPLEMENTED            | manifest.json, admin/manifest.json                | Standalone installable mobile configuration
+Student Data Excel Import      | PARTIALLY IMPLEMENTED  | dashboard.html (placeholder UI active)            | UI ready; file parsing engine not installed
+Excel / Spreadsheet Export     | PARTIALLY IMPLEMENTED  | users permissions toggle present                  | Permission flag exists; export code planned
+Fees / Billing Portal          | PLANNED / NOT FOUND    | None                                              | Planned future module; no code present
+Report Card / PDF Generator    | PLANNED / NOT FOUND    | None                                              | Planned future module; no code present
+Firebase Cloud Functions       | NOT FOUND              | None                                              | Completely client-side architecture
+Backend REST / GraphQL API     | NOT FOUND              | None                                              | Direct client-to-Firebase communication
+
+================================================================================
+16. KNOWN ISSUES / WARNINGS
+================================================================================
+
+1. Missing `firestore.rules` in Repository:
+   - Firestore security rules are not committed to source control. If database rules in the Firebase console are left in test mode or open, unauthorized clients could manipulate documents directly.
+2. In-Memory / Seed Student Data:
+   - Student records in `js/school/student-service.js` are currently generated via a deterministic generator based on the school's class range and cached in IndexedDB. While this provides instant, rich analytics and demonstration data, persistent student CRUD operations directly against a Firestore `students` collection are not yet wired.
+3. Super Admin Hardcoded UID:
+   - The master Super Admin UID (`FSe6FQsJrKaDVqqjcO4jv2EIkfp2`) is embedded in client files. While effective for frontend routing, it should be reinforced with custom claims and server-side rules.
+4. Excel Import / Export Libraries Not Installed:
+   - The UI contains buttons and toggles for Excel export and student data import, but spreadsheet libraries (e.g., `xlsx` or `papaparse`) are not yet installed in `package.json`.
+5. Local File Protocol (`file:///`) Limitation:
+   - Because the project uses native ES modules (`import`/`export`), loading the HTML files directly via `file:///` causes browser CORS errors. Must be served using a local HTTP server (e.g., `npm run dev` via Vite, or VS Code Live Server). A detection banner is present in `admin/index.html`.
+
+================================================================================
+17. DEPENDENCIES & CONFIGURATION
+================================================================================
+
+- `package.json` Dependencies:
+  - `firebase`: "^10.12.2" (Modular Google Firebase Web SDK)
+- `package.json` DevDependencies:
+  - `vite`: "^5.3.1" (Next-generation frontend tooling and local dev server)
+- Scripts:
+  - `npm run dev` -> Runs `vite` development server on local port (default `http://localhost:5173/`).
+  - `npm run build` -> Runs `vite build` to compile production assets into the `dist/` folder.
+  - `npm run preview` -> Runs `vite preview` to preview the compiled `dist/` bundle locally.
+- Configuration References:
+  - `vite.config.js`: Defines rollup multi-page build inputs (`index.html`, `dashboard.html`, `admin/index.html`, `admin/dashboard.html`), `base: "./"`, and `copyPublicDir: true`.
+- Setup Steps for New Developers:
+  1. Ensure Node.js (v18+) is installed.
+  2. Clone/open repository directory: `f:\New Data Portal - Firebase`.
+  3. Install dependencies: `npm install`.
+  4. Start development server: `npm run dev`.
+  5. Open browser at local Vite URL (e.g., `http://localhost:5173/index.html` for School Portal or `http://localhost:5173/admin/index.html` for Super Admin).
+
+================================================================================
+18. DEVELOPMENT WORKFLOW
+================================================================================
+
+- Where to Add New Pages:
+  - Add new HTML entry file in root or subfolder (e.g., `reports.html`).
+  - Register the new page in `vite.config.js` under `build.rollupOptions.input`.
+  - Include the Firebase Modular SDK import map in the HTML `<head>`.
+- Where to Add UI Views / Sub-Tabs:
+  - For School Portal: Add `<section id="view-<name>" class="school-view">` in `dashboard.html`. Add corresponding navigation link in `<nav class="sidebar-nav">` with `data-view="<name>"`. Handle view activation in `js/school/school-ui.js` within `setupSchoolNavigation()`.
+  - For Super Admin: Add `<section id="view-<name>" class="admin-view">` in `admin/dashboard.html`. Add navigation item in sidebar and mobile bottom nav. Register route in `setupNavigation()` in `js/admin/superadmin-ui.js`.
+- Where Database Logic Belongs:
+  - Administrative database operations belong exclusively in `js/admin/firestore-service.js`.
+  - School portal database and caching operations belong in `js/school/school-ui.js` and `js/school/student-service.js`.
+  - Universal session and auth lifecycle logic belongs in `js/session-manager.js`.
+  - Low-level IndexedDB caching logic belongs in `js/offline-store.js`.
+- Where Firebase Configuration Belongs:
+  - All Firebase initialization, authentication instances, and Firestore instances MUST be imported from `js/firebase.js`. Never call `initializeApp()` elsewhere.
+- Naming Conventions Used:
+  - Files: kebab-case (e.g., `session-manager.js`, `firestore-service.js`, `school-config.js`).
+  - Collections: snake_case / lowercase plural (e.g., `schools`, `users`, `sessions`, `admin_logs`).
+  - School ID: Uppercase alphanumeric (e.g., `SCHOOL001`).
+  - Session ID: Uppercase prefix with timestamp: `SES_<timestamp>_<random>`.
+  - Device ID: Uppercase prefix: `DEV_<random>`.
+  - HTML IDs: kebab-case (e.g., `sidebar-user-email`, `login-submit-btn`).
+  - CSS Classes: kebab-case with BEM-style modifiers (e.g., `badge-active`, `btn-primary`, `status-online`).
+- Critical Files to Never Modify Casually:
+  - `js/firebase.js`: Foundation for all auth and database instances.
+  - `js/session-manager.js`: Controls 24h inactivity expiration, session cleanup, and forced logout.
+  - `js/school-config.js`: Central rank calculation; modifying ranks breaks class range validations.
+
+================================================================================
+19. FUTURE-READY ARCHITECTURE & RECOMMENDATIONS
+================================================================================
+
+Current Architectural Strengths Ready for Future Expansion:
+1. True Multi-School Multi-Tenant Schema:
+   - `schoolId` is already established as the universal foreign key linking schools, accounts, staff, and active device sessions.
+2. 3-Tier Account Model:
+   - Clean distinction between Super Admin (network level), Primary School Account (institutional level), and School Users (staff level).
+3. Pluggable Offline-First IndexedDB Store:
+   - `SchoolPortalOfflineDB` is fully implemented and operational. It already supports offline document caching and mutation queuing.
+4. Modular Dataset Architecture:
+   - `js/school/student-service.js` is built around dynamic dataset keys (`school_data`, `udise`, `three_point_zero`). New datasets (e.g., CBSE board registry, state scholarship registry) can be added simply by defining a new key in `DATASET_KEYS`.
+
+Recommendations for Next-Phase Development:
+1. Wire Real Firestore Student Ingestion:
+   - Replace or supplement the seed generator in `student-service.js` with a Firestore subcollection `schools/{schoolId}/students` or a top-level collection `students` with `where("schoolId", "==", currentSchoolId)`.
+2. Install Client-Side Excel Engine:
+   - Install `xlsx` (SheetJS) to enable the already-wired "Excel Export" button and implement batch Excel ingestion for student records.
+3. Migrate Privileged Logic to Cloud Functions:
+   - Move `cleanupOldSessions()` and user creation to Cloud Functions to run as automated background cron jobs.
+4. Implement Fees Module:
+   - Create a top-level collection `fees` with document structure `{ feeId, schoolId, studentId, academicYear, totalAmount, paidAmount, balance, status, dueDate, updatedAt }`.
+5. Implement Client-Side PDF Generation:
+   - Install `jspdf` and `jspdf-autotable` to generate printable student report cards and class rosters adhering to institutional branding.
+
+================================================================================
+20. PROJECT DEPENDENCY / CONNECTION MAP
+================================================================================
+
+[User Browser (Desktop / Mobile PWA)]
+   │
+   ├── School Portal Entry (`index.html` -> `js/user/login.js`)
+   │     │
+   │     ├── Authenticates against → [Firebase Auth (`signInWithEmailAndPassword`)]
+   │     │
+   │     ├── Verifies Account Level 2/3 → [Firestore: `users/{uid}` & `schools/{schoolId}`]
+   │     │
+   │     ├── Checks Device Limits → [Firestore: `sessions` query]
+   │     │
+   │     └── Enters → `dashboard.html` (`js/school/dashboard.js` & `js/school/school-ui.js`)
+   │           │
+   │           ├── Loads Local Cache → [IndexedDB: `SchoolPortalOfflineDB` (`cache` store)]
+   │           │
+   │           ├── Syncs Datasets → [Dataset Service: `student-service.js` (School Data, UDISE, 3.0)]
+   │           │
+   │           ├── Resolves Logos → [Image Resolver: `image-resolver.js` (Google Drive / CDN)]
+   │           │
+   │           ├── Heartbeat & Inactivity → [Session Manager: `session-manager.js` (24h timer)]
+   │           │
+   │           └── Offline Queue → [IndexedDB: `pendingQueue` -> Auto-syncs to Firestore]
+   │
+   └── Super Admin Entry (`admin/index.html` -> `js/admin/login.js`)
+         │
+         ├── Authenticates Master UID (`FSe6FQsJrKaDVqqjcO4jv2EIkfp2`)
+         │
+         └── Enters → `admin/dashboard.html` (`js/admin/dashboard.js` & `js/admin/superadmin-ui.js`)
+               │
+               ├── Manages Institutions → [Firestore: `schools` collection]
+               │
+               ├── Manages Accounts & Permissions → [Firestore: `users` collection]
+               │
+               ├── Real-Time Session Monitoring → [Firestore: `sessions` collection]
+               │
+               └── System Audit Records → [Firestore: `admin_logs` collection]
+
+================================================================================
+21. IMPORTANT NAMES & IDENTIFIERS REFERENCE
+================================================================================
+
+- Project Name: school-data-portal
+- App Display Names: "School Portal" (User facing), "Admin Panel" (Super Admin)
+- Firebase Project ID: `school-data-portal-firebase`
+- Firebase Auth Domain: `school-data-portal-firebase.firebaseapp.com`
+- Super Admin UID: `FSe6FQsJrKaDVqqjcO4jv2EIkfp2`
+- Firestore Collections:
+  1. `schools`
+  2. `users`
+  3. `sessions`
+  4. `admin_logs`
+- IndexedDB Database: `SchoolPortalOfflineDB` (Version 1)
+  - Object Store: `cache` (indexes: `collection`, `updatedAt`)
+  - Object Store: `pendingQueue` (indexes: `collection`, `createdAt`)
+- LocalStorage Keys:
+  - `current_session_id`: Active session ID string for the current browser
+  - `portal_last_activity`: Millisecond timestamp of last genuine user interaction
+- SessionStorage Keys:
+  - `current_session_id`: Active session backup
+  - `forced_logout_reason`: Text description displayed on login page when revoked
+- Datasets Supported:
+  - `school_data` ("School Data")
+  - `udise` ("UDISE")
+  - `three_point_zero` ("3.0")
+- Canonical Classes (15):
+  - Nursery, KG 1, KG 2, Class 1, Class 2, Class 3, Class 4, Class 5, Class 6, Class 7, Class 8, Class 9, Class 10, Class 11, Class 12
+- Standard Senior Subjects (17):
+  - Physics, Chemistry, Mathematics, Biology, English, Hindi, Accountancy, Business Studies, Economics, Computer Science, Information Practices, History, Political Science, Geography, Psychology, Sociology, Physical Education
+- ID Formats:
+  - School ID: Uppercase string, e.g., `SCHOOL001`
+  - Session ID: `SES_<timestamp>_<4-digit random>`, e.g., `SES_1725838491000_4821`
+  - Device ID: `DEV_<4-digit random>`, e.g., `DEV_4921`
+  - Scholar No: `SCH-<schoolId>-<class>-<rollNo>`
+  - Student Record ID: `SD-<schoolId>-<num>`, `UD-<schoolId>-<num>`, `P3-<schoolId>-<num>`
+- User Permissions Object:
+  - `editable`: boolean
+  - `addStudent`: boolean
+  - `deleteStudent`: boolean
+  - `excelExport`: boolean
+  - `reports`: boolean
+
+================================================================================
+22. INSTRUCTIONS FOR FUTURE AI AGENTS
+================================================================================
+
+Future AI agents reading this technical handoff document MUST adhere to the following directives:
+
+1. Baseline Truth:
+   - Treat this document as the authoritative baseline context for the project.
+   - Do NOT assume features marked as PLANNED (e.g., Fees Portal, PDF report generation, Excel export file writer) already exist.
+2. Architecture Preservation:
+   - Preserve the existing Vanilla JavaScript (ES modules) + native CSS + Vite build architecture.
+   - Do NOT introduce React, Vue, Angular, Next.js, or Tailwind CSS unless the user explicitly requests an architectural redesign.
+   - Do NOT assume or create an Express or Node.js backend server; the app connects directly from the browser to Firebase Modular SDK v10.12.2.
+3. Multi-School & Multi-Tenant Integrity:
+   - Always maintain the `schoolId` scoping across all database operations, queries, and IndexedDB caches.
+   - Respect the 3-level account hierarchy: Super Admin (`SUPER_ADMIN_UID`), Primary School Account (`type: "school"`), and School User (`type: "user"`).
+4. Session & Inactivity Rules:
+   - Any new authentication or dashboard feature must integrate with `js/session-manager.js`.
+   - Respect the 24-hour inactivity timeout, the concurrent device limit check (`deviceLimit`), and the per-user 3-session retention rule (`enforceUserSessionRetention`).
+5. Offline-First Caching:
+   - Any new data reading or mutation operations must support the offline architecture in `js/offline-store.js` (cache reads first, enqueue pending mutations when offline).
+6. File & Identifier Consistency:
+   - Use the exact filenames, routes, and collection names documented in Section 3, Section 6, and Section 21.
+7. Secrets Policy:
+   - NEVER write or expose private service account keys, tokens, or plaintext passwords in code or documentation.
+8. Conflict Notification:
+   - If a requested change conflicts with the multi-school isolation, session retention rules, or offline store, explicitly explain the conflict before writing code.
+
+================================================================================
+23. FINAL ACCURACY AUDIT
+================================================================================
+
+[X] Inspected complete project workspace: All files in root, `admin/`, `css/`, and `js/` reviewed.
+[X] Identified actual frontend technology: Pure Vanilla JS (ES Modules) + HTML5 + Vanilla CSS3 with CSS custom properties.
+[X] Identified backend technology: Verified that NO custom backend exists; direct client-to-Firebase Modular SDK architecture.
+[X] Inspected Firebase configuration: Captured exact config keys, project ID `school-data-portal-firebase`, and modular SDK exports.
+[X] Inspected authentication: Documented email/password, persistence, 3-tier roles, and Super Admin UID verification.
+[X] Inspected database structure: Verified Firestore collections (`schools`, `users`, `sessions`, `admin_logs`) and IndexedDB schema (`SchoolPortalOfflineDB`).
+[X] Inspected security architecture: Verified RBAC, session retention, device limits, and documented security recommendations.
+[X] Inspected routes: Verified 4 Vite HTML entry points and SPA view routing.
+[X] Distinguished implemented vs planned features: Fees and PDF export accurately designated as PLANNED.
+[X] Removed secret values: Sensitive API key string redacted from sensitive outputs.
+[X] Fully comprehensive for future AI handoff: Standalone context complete without prior conversation history.
+
+END OF PROJECT CONTEXT

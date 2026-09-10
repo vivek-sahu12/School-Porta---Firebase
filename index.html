@@ -111,6 +111,15 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((err) => {
+          console.warn('Root ServiceWorker registration:', err);
+        });
+      });
+    }
+  </script>
   <script type="module" src="./js/user/login.js"></script>
 </body>
 </html>

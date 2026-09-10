@@ -24,10 +24,16 @@ import {
   verifyAuthoritativeSession,
   enforceUserSessionRetention,
   performExplicitLogout,
-  performForcedLogout
+  performForcedLogout,
+  syncPendingQueueToFirebase
 } from "../session-manager.js";
 
-import { initSchoolPortalUI } from "./school-ui.js";
+import { 
+  initSchoolPortalUI, 
+  refreshSchoolPortalDataViews, 
+  updateUserAccountData 
+} from "./school-ui.js";
+import { checkAndSyncDatasets } from "./student-service.js";
 
 // DOM Elements
 const pageLoader = document.getElementById("page-loader");
@@ -38,6 +44,7 @@ let unsubSessionMonitor = null;
 let unsubUserMonitor = null;
 let unsubSchoolMonitor = null;
 let heartbeatInterval = null;
+let hourlySyncInterval = null;
 let activeSessionId = null;
 
 /**
@@ -72,11 +79,27 @@ initInactivityTracker((reason) => {
 
 initNetworkMonitor({
   onReconnect: async () => {
-    // When reconnecting from offline, verify if Admin force-logged out this session while offline
+    // 1. When reconnecting from offline, verify if Admin force-logged out this session while offline
     if (auth.currentUser) {
       await verifyAuthoritativeSession(auth.currentUser, (reason) => {
         performForcedLogout(reason, "./index.html");
       });
+    }
+
+    // 2. Automatically synchronize any offline pending mutations to Firebase
+    await syncPendingQueueToFirebase();
+
+    // 3. Lightweight dataset freshness check on reconnect
+    const currentSchoolId = localStorage.getItem("current_school_id");
+    if (currentSchoolId) {
+      try {
+        const syncRes = await checkAndSyncDatasets(currentSchoolId);
+        if (syncRes.updated) {
+          refreshSchoolPortalDataViews();
+        }
+      } catch (err) {
+        console.warn("Reconnect freshness check note:", err);
+      }
     }
   }
 });
@@ -101,10 +124,14 @@ onAuthStateChanged(auth, async (user) => {
       try {
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          userData = userDocSnap.data();
-          await saveDocToCache("users", user.uid, userData);
+        if (!userDocSnap.exists()) {
+          console.warn("User account record no longer exists in Firestore. Revoking session.");
+          await performForcedLogout("Your account has been deleted by an administrator.", "./index.html");
+          return;
         }
+
+        userData = userDocSnap.data();
+        await saveDocToCache("users", user.uid, userData);
 
         if (userData?.schoolId) {
           const schoolDocRef = doc(db, "schools", userData.schoolId);
@@ -126,8 +153,8 @@ onAuthStateChanged(auth, async (user) => {
       return;
     }
 
-    if (userData.status === "Inactive") {
-      await performForcedLogout("Your account has been deactivated by the administrator.", "./index.html");
+    if (userData.status === "Inactive" || userData.status === "Deleted") {
+      await performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
       return;
     }
 
@@ -137,6 +164,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     // D. Setup active device session identifier (persisted in localStorage)
+    localStorage.setItem("current_school_id", userData.schoolId);
     activeSessionId = localStorage.getItem("current_session_id") || sessionStorage.getItem("current_session_id");
 
     if (!activeSessionId) {
@@ -233,23 +261,39 @@ onAuthStateChanged(auth, async (user) => {
               console.warn("Session status marked as", sessionData.status, "by administrator.");
               await performForcedLogout("Your session was ended by the administrator.", "./index.html");
             }
+          } else {
+            console.warn("Session record deleted by administrator. Revoking access.");
+            await performForcedLogout("Your session was ended by the administrator.", "./index.html");
           }
         }, (err) => {
           console.warn("Session snapshot listener warning:", err);
         });
 
-        // Real-Time Account Deactivation Monitor
+        // Real-Time Account Deactivation & Permissions Monitor
         const userDocRef = doc(db, "users", user.uid);
         unsubUserMonitor = onSnapshot(userDocRef, async (snap) => {
-          if (snap.exists() && snap.data().status === "Inactive") {
-            await performForcedLogout("Your account has been deactivated by the administrator.", "./index.html");
+          if (snap.exists()) {
+            const freshUserData = snap.data();
+            if (freshUserData && (freshUserData.status === "Inactive" || freshUserData.status === "Deleted")) {
+              await performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
+              return;
+            }
+            if (freshUserData) {
+              await saveDocToCache("users", user.uid, freshUserData);
+              updateUserAccountData(freshUserData);
+            }
+          } else {
+            console.warn("User account record deleted by administrator. Revoking access.");
+            await performForcedLogout("Your account has been deleted by an administrator.", "./index.html");
           }
+        }, (err) => {
+          console.warn("User snapshot listener note:", err);
         });
 
         // Real-Time School Deactivation Monitor
         const schoolDocRef = doc(db, "schools", userData.schoolId);
         unsubSchoolMonitor = onSnapshot(schoolDocRef, async (snap) => {
-          if (snap.exists() && snap.data().status === "Inactive") {
+          if (!snap.exists() || (snap.exists() && snap.data().status === "Inactive")) {
             await performForcedLogout("This school institution has been deactivated.", "./index.html");
           }
         });
@@ -271,6 +315,23 @@ onAuthStateChanged(auth, async (user) => {
         console.warn("Heartbeat update skipped:", hbErr);
       }
     }, 60000);
+
+    // Smart Automatic Background Synchronization (~1 hour interval)
+    // Lightweight check: only inspects school doc metadata; does NOT download full student datasets if unchanged
+    if (hourlySyncInterval) clearInterval(hourlySyncInterval);
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    hourlySyncInterval = setInterval(async () => {
+      try {
+        if (navigator.onLine && userData?.schoolId) {
+          const syncRes = await checkAndSyncDatasets(userData.schoolId);
+          if (syncRes.updated) {
+            refreshSchoolPortalDataViews();
+          }
+        }
+      } catch (hourlyErr) {
+        console.warn("Background hourly freshness check note:", hourlyErr);
+      }
+    }, ONE_HOUR_MS);
 
     // Initialize School Portal UI with current school context
     await initSchoolPortalUI(user, userData, schoolData);
@@ -299,6 +360,8 @@ if (schoolLogoutBtn) {
     if (unsubUserMonitor) unsubUserMonitor();
     if (unsubSchoolMonitor) unsubSchoolMonitor();
     if (heartbeatInterval) clearInterval(heartbeatInterval);
+    if (hourlySyncInterval) clearInterval(hourlySyncInterval);
+    localStorage.removeItem("current_school_id");
 
     await performExplicitLogout("./index.html");
   });

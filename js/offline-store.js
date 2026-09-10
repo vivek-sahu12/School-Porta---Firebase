@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = "SchoolPortalOfflineDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -15,8 +15,7 @@ export function openOfflineDB() {
   if (dbPromise) return dbPromise;
 
   dbPromise = new Promise((resolve, reject) => {
-    if (!window.indexedDB) {
-      console.warn("IndexedDB is not supported in this browser. Offline persistence will be degraded.");
+    if (typeof window === "undefined" || !window.indexedDB) {
       resolve(null);
       return;
     }
@@ -38,6 +37,11 @@ export function openOfflineDB() {
         const queueStore = db.createObjectStore("pendingQueue", { keyPath: "id", autoIncrement: true });
         queueStore.createIndex("collection", "collection", { unique: false });
         queueStore.createIndex("createdAt", "createdAt", { unique: false });
+      }
+
+      // 3. Dedicated store for persistent school logo base64 image data
+      if (!db.objectStoreNames.contains("logos")) {
+        db.createObjectStore("logos", { keyPath: "schoolId" });
       }
     };
 
@@ -190,24 +194,27 @@ export async function saveCollectionToCache(collectionName, docsArray, idField =
 
 /**
  * Enqueue a pending operation into the reliable offline queue
- * @param {Object} op - { collection, docId, action: 'set'|'update'|'delete', payload: Object }
+ * @param {Object} op - { collection, docId, action: 'set'|'update'|'delete', payload: Object, schoolId: string }
  */
-export async function enqueuePendingOp({ collection, docId, action = "set", payload = {} }) {
+export async function enqueuePendingOp({ collection, docId, action = "set", payload = {}, schoolId = "" }) {
   try {
+    const opId = `OP_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const db = await openOfflineDB();
     if (!db) {
       // Fallback to localStorage if IndexedDB is unavailable
       const fallbackQueue = JSON.parse(localStorage.getItem("fallback_pending_queue") || "[]");
       fallbackQueue.push({
-        id: Date.now() + Math.random(),
+        id: opId,
         collection,
         docId,
         action,
         payload,
-        createdAt: Date.now()
+        schoolId,
+        createdAt: Date.now(),
+        attempts: 0
       });
       localStorage.setItem("fallback_pending_queue", JSON.stringify(fallbackQueue));
-      return;
+      return opId;
     }
 
     return new Promise((resolve, reject) => {
@@ -215,10 +222,12 @@ export async function enqueuePendingOp({ collection, docId, action = "set", payl
       const store = tx.objectStore("pendingQueue");
 
       const req = store.add({
+        opId,
         collection,
         docId,
         action,
         payload,
+        schoolId,
         createdAt: Date.now(),
         attempts: 0
       });
@@ -275,7 +284,7 @@ export async function removePendingOp(opId) {
     const db = await openOfflineDB();
     if (!db) {
       const fallbackQueue = JSON.parse(localStorage.getItem("fallback_pending_queue") || "[]");
-      const filtered = fallbackQueue.filter((item) => item.id !== opId);
+      const filtered = fallbackQueue.filter((item) => (item.id !== opId && item.opId !== opId));
       localStorage.setItem("fallback_pending_queue", JSON.stringify(filtered));
       return;
     }
@@ -294,6 +303,114 @@ export async function removePendingOp(opId) {
 }
 
 /**
+ * Save school logo representation (Base64 dataUrl) to dedicated IndexedDB store
+ */
+export async function saveLogoToCache(schoolId, logoData) {
+  if (!schoolId || !logoData) return false;
+  try {
+    const db = await openOfflineDB();
+    if (!db) {
+      try {
+        localStorage.setItem(`school_logo_${schoolId}`, JSON.stringify(logoData));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    return new Promise((resolve) => {
+      const tx = db.transaction("logos", "readwrite");
+      const store = tx.objectStore("logos");
+      const record = {
+        schoolId: String(schoolId).trim().toUpperCase(),
+        ...logoData,
+        savedAt: Date.now()
+      };
+      const req = store.put(record);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+    });
+  } catch (err) {
+    console.warn("Error caching logo:", err);
+    return false;
+  }
+}
+
+/**
+ * Get cached school logo data from dedicated IndexedDB store
+ */
+export async function getLogoFromCache(schoolId) {
+  if (!schoolId) return null;
+  const cleanId = String(schoolId).trim().toUpperCase();
+  try {
+    const db = await openOfflineDB();
+    if (!db) {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(`school_logo_${cleanId}`) : null;
+      return raw ? JSON.parse(raw) : null;
+    }
+
+    return new Promise((resolve) => {
+      const tx = db.transaction("logos", "readonly");
+      const store = tx.objectStore("logos");
+      const req = store.get(cleanId);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (err) {
+    console.warn("Error reading cached logo:", err);
+    return null;
+  }
+}
+
+/**
+ * Save dataset sync metadata (timestamps & hashes) for lightweight freshness checks
+ */
+export async function saveSyncMeta(schoolId, meta) {
+  if (!schoolId) return;
+  const cleanId = String(schoolId).trim().toUpperCase();
+  return saveDocToCache("sync_meta", cleanId, {
+    schoolId: cleanId,
+    ...meta,
+    updatedAt: Date.now()
+  });
+}
+
+/**
+ * Get dataset sync metadata for a school
+ */
+export async function getSyncMeta(schoolId) {
+  if (!schoolId) return null;
+  const cleanId = String(schoolId).trim().toUpperCase();
+  return getDocFromCache("sync_meta", cleanId);
+}
+
+/**
+ * Clear school-specific cached dataset to preserve school isolation
+ */
+export async function clearSchoolCache(schoolId) {
+  if (!schoolId) return;
+  const cleanId = String(schoolId).trim().toUpperCase();
+  try {
+    const db = await openOfflineDB();
+    if (!db) return;
+
+    const tx = db.transaction("cache", "readwrite");
+    const store = tx.objectStore("cache");
+    const keys = [
+      `students_sd_${cleanId}`,
+      `students_ud_${cleanId}`,
+      `students_p3_${cleanId}`,
+      `schools_${cleanId}`,
+      `sync_meta_${cleanId}`
+    ];
+
+    keys.forEach((k) => store.delete(k));
+  } catch (err) {
+    console.warn("Error clearing school cache:", err);
+  }
+}
+
+/**
  * Clear local cached database upon explicit user logout
  */
 export async function clearOfflineCache() {
@@ -301,9 +418,10 @@ export async function clearOfflineCache() {
     const db = await openOfflineDB();
     if (!db) return;
 
-    const tx = db.transaction(["cache", "pendingQueue"], "readwrite");
+    const tx = db.transaction(["cache", "pendingQueue", "logos"], "readwrite");
     tx.objectStore("cache").clear();
     tx.objectStore("pendingQueue").clear();
+    tx.objectStore("logos").clear();
     localStorage.removeItem("fallback_pending_queue");
   } catch (err) {
     console.warn("Failed to clear offline cache:", err);

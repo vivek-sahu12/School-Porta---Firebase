@@ -10,7 +10,7 @@
   <!-- Favicon & PWA Icons -->
   <link rel="icon" href="./assets/icon-BOSJock3.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-BOSJock3.svg">
-  <link rel="manifest" href="./assets/manifest-4mMUZuQz.json">
+  <link rel="manifest" href="./assets/manifest-BVC_1nC-.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,9 +29,9 @@
     }
   }
   </script>
-  <script type="module" crossorigin src="./assets/main-BCKI-p9A.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/firebase-BaMEv929.js">
-  <link rel="modulepreload" crossorigin href="./assets/session-manager-DIPlyXrz.js">
+  <script type="module" crossorigin src="./assets/main-Crbj-fIz.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/firebase-CPin_wd-.js">
+  <link rel="modulepreload" crossorigin href="./assets/session-manager-C-rnyvrU.js">
   <link rel="stylesheet" crossorigin href="./assets/main-Dz7ptu05.css">
 </head>
 <body class="login-page">
@@ -115,5 +115,14 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((err) => {
+          console.warn('Root ServiceWorker registration:', err);
+        });
+      });
+    }
+  </script>
 </body>
 </html>

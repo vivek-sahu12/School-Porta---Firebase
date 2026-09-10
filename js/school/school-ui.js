@@ -1,4 +1,5 @@
 import {
+  auth,
   db,
   collection,
   doc,
@@ -23,13 +24,20 @@ import {
 
 import {
   onSyncCompleted,
-  syncPendingQueueToFirebase
+  syncPendingQueueToFirebase,
+  performForcedLogout
 } from "../session-manager.js";
+
+import { handleModalBackEvent } from "./modal-history-manager.js";
 
 import {
   STANDARD_SENIOR_SUBJECTS,
   validateClassRange,
-  includesSeniorClasses
+  includesSeniorClasses,
+  normalizeClassLabel,
+  formatClassDisplay,
+  escapeHtml,
+  highlightSearchMatches
 } from "../school-config.js";
 
 import {
@@ -43,6 +51,21 @@ import {
   getStudentById
 } from "./student-service.js";
 
+import { generateStudentListPdf } from "./pdf-service.js";
+import { openPdfColumnModal } from "./pdf-column-modal.js";
+import { generateStudentListExcel } from "./excel-service.js";
+import { openExcelConfirmModal, closeExcelConfirmModal } from "./excel-confirm-modal.js";
+import { SUPER_ADMIN_UID } from "../admin/firestore-service.js";
+
+import {
+  calculateExactAge,
+  evaluateClassEligibility,
+  formatDateDMY,
+  formatDateVerbose,
+  parseDateSafe
+} from "./age-calculator.js";
+import { createDatePicker } from "./date-picker-sheet.js";
+
 // Current Active School Session Context
 let currentSchoolId = "";
 let currentSchoolAccount = null;
@@ -54,10 +77,32 @@ let unsubSchoolDoc = null;
 let unsubSchoolUsers = null;
 let unsubSchoolSessions = null;
 
-// Student Dashboard State
+// Student Dashboard State & Hierarchical History Stack
 let activeDataset = DATASET_KEYS.SCHOOL_DATA;
 let activeStudentListFilters = { search: "", className: "", gender: "", category: "" };
 let activeDetailStudent = null;
+
+const VIEW_TITLES = {
+  dashboard: "Dashboard",
+  "student-list": "Student Records",
+  "student-detail": "Student Profile",
+  "school-info": "School Information",
+  "school-users": "School Users",
+  sessions: "Active Sessions",
+  "student-data": "Student Data",
+  "age-calculator": "Age Calculator"
+};
+
+let currentPortalState = {
+  view: "dashboard",
+  dataset: DATASET_KEYS.SCHOOL_DATA,
+  filters: { search: "", className: "", gender: "", category: "" },
+  studentId: null,
+  title: "Dashboard",
+  scrollY: 0
+};
+let internalNavStack = [];
+let isNavHistoryInitialized = false;
 
 // Toast Engine
 export function showSchoolToast(message, type = "success") {
@@ -128,6 +173,17 @@ export async function initSchoolPortalUI(user, userAccountData, initialSchoolDat
   // Initialize Student Datasets & Analytics Dashboard
   await initStudentDashboard();
 
+  // Initialize or restore hierarchical router state without reload/redirect
+  if (history.state && history.state.portalState) {
+    const restoredState = { ...history.state.portalState };
+    if (restoredState.view === "dashboard") {
+      restoredState.dataset = DATASET_KEYS.SCHOOL_DATA;
+    }
+    navigateSchoolPortal(restoredState, { replace: true, fromHistory: true });
+  } else {
+    navigateSchoolPortal({ view: "dashboard", dataset: DATASET_KEYS.SCHOOL_DATA }, { replace: true });
+  }
+
   // 2. Setup real-time listeners when online
   if (navigator.onLine) {
     setupSchoolLiveListeners();
@@ -145,13 +201,34 @@ export async function initSchoolPortalUI(user, userAccountData, initialSchoolDat
 }
 
 /**
+ * Refresh all active School Portal UI views immediately from current memory/cache
+ */
+export function refreshSchoolPortalDataViews() {
+  renderSchoolHeaderInfo();
+  renderSchoolInfoView();
+  updateSchoolMetrics();
+  renderSchoolUsersTable();
+  renderSchoolSessionsTable();
+  renderDatasetDashboard();
+
+  const studentListView = document.getElementById("view-student-list");
+  if (studentListView && studentListView.classList.contains("active")) {
+    renderStudentListCards();
+  }
+}
+
+/**
  * Setup Manual Data Synchronization Action
  */
+let isManualSyncRunning = false;
+
 function setupManualSync() {
   const syncBtn = document.getElementById("manual-sync-btn");
   if (!syncBtn) return;
 
   syncBtn.addEventListener("click", async () => {
+    if (isManualSyncRunning) return;
+    isManualSyncRunning = true;
     syncBtn.disabled = true;
     syncBtn.innerHTML = `
       <span class="sync-spinner" style="width:11px; height:11px;"></span>
@@ -159,11 +236,19 @@ function setupManualSync() {
     `;
 
     try {
-      // 1. Process pending offline operations
+      if (!navigator.onLine) {
+        showSchoolToast("Sync failed. Please check your connection and try again.", "error");
+        return;
+      }
+
+      // 1. Process pending offline operations queue
       await syncPendingQueueToFirebase();
 
-      // 2. Targeted single fetch for school and user records
-      if (navigator.onLine && currentSchoolId) {
+      // 2. Authoritative latest datasets fetch from Cloud Firestore
+      const datasetResult = await loadSchoolDatasets(currentSchoolId, { forceRefresh: true });
+
+      // 3. Targeted fetch for school document and users records
+      if (currentSchoolId) {
         const schoolDocRef = doc(db, "schools", currentSchoolId);
         const schoolDocSnap = await getDoc(schoolDocRef);
         if (schoolDocSnap.exists()) {
@@ -182,71 +267,61 @@ function setupManualSync() {
         await saveCollectionToCache("users", liveSchoolUsers, "firebaseUid");
       }
 
-      renderSchoolHeaderInfo();
-      renderSchoolInfoView();
-      updateSchoolMetrics();
-      renderSchoolUsersTable();
-      renderSchoolSessionsTable();
-      renderDatasetDashboard();
+      // 4. Re-render ALL related dashboard information together
+      refreshSchoolPortalDataViews();
 
-      showSchoolToast("Data synchronized successfully!", "success");
+      if (datasetResult.updated) {
+        showSchoolToast("Data synced successfully.", "success");
+      } else {
+        showSchoolToast("Data is already up to date.", "info");
+      }
     } catch (err) {
       console.warn("Manual sync error:", err);
-      showSchoolToast("Local cache up to date.", "info");
+      showSchoolToast("Sync failed. Please check your connection and try again.", "error");
     } finally {
       syncBtn.disabled = false;
       syncBtn.innerHTML = `
         <svg style="width: 13px; height: 13px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
         <span>Sync Data</span>
       `;
+      isManualSyncRunning = false;
     }
   });
 }
 
 /**
- * Navigation View Router & Direct Dataset Link Handler
+ * Navigation View Router & Hierarchical History Controller
  */
 function setupSchoolNavigation() {
-  const navLinks = document.querySelectorAll(".nav-link");
-  const views = document.querySelectorAll(".school-view");
-  const titleEl = document.getElementById("page-view-title");
+  if (!isNavHistoryInitialized) {
+    window.addEventListener("popstate", (e) => {
+      // 1. If an open modal handled this back press on mobile, prevent underlying page navigation
+      if (handleModalBackEvent(e)) {
+        return;
+      }
 
-  const titles = {
-    dashboard: "Dashboard",
-    "student-list": "Student Records",
-    "student-detail": "Student Profile",
-    "school-info": "School Information",
-    "school-users": "School Users",
-    sessions: "Active Sessions",
-    "student-data": "Student Data"
-  };
-
-  window.navigateSchoolView = (viewName) => {
-    navLinks.forEach((l) => {
-      const v = l.getAttribute("data-view");
-      const ds = l.getAttribute("data-dataset");
-      if (v === viewName) {
-        l.classList.add("active");
-      } else if (viewName === "student-list" && ds === activeDataset) {
-        l.classList.add("active");
+      if (e.state && e.state.portalState) {
+        if (internalNavStack.length > 0) {
+          internalNavStack.pop();
+        }
+        navigateSchoolPortal(e.state.portalState, { fromHistory: true });
+      } else if (internalNavStack.length > 0) {
+        const prevState = internalNavStack.pop();
+        navigateSchoolPortal(prevState, { fromHistory: true });
       } else {
-        l.classList.remove("active");
+        // Safe fallback to dashboard (NEVER logout or jump to login!)
+        navigateSchoolPortal({ view: "dashboard", dataset: activeDataset }, { fromHistory: true });
       }
     });
 
-    views.forEach((v) => {
-      if (v.id === `view-${viewName}`) v.classList.add("active");
-      else v.classList.remove("active");
-    });
+    isNavHistoryInitialized = true;
+  }
 
-    if (titleEl) {
-      titleEl.textContent = titles[viewName] || "School Portal";
-    }
-
-    const sidebar = document.getElementById("sidebar");
-    if (sidebar) sidebar.classList.remove("open");
+  window.navigateSchoolView = (viewName) => {
+    navigateSchoolPortal({ view: viewName, dataset: activeDataset });
   };
 
+  const navLinks = document.querySelectorAll(".nav-link");
   navLinks.forEach((link) => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
@@ -254,18 +329,201 @@ function setupSchoolNavigation() {
       const targetView = link.getAttribute("data-view");
 
       if (datasetKey) {
-        // Direct dataset navigation to student list
         switchDataset(datasetKey);
         openStudentListView({ title: `All Records (${DATASET_LABELS[datasetKey] || datasetKey})` });
-        navLinks.forEach((l) => l.classList.remove("active"));
-        link.classList.add("active");
-        const sidebar = document.getElementById("sidebar");
-        if (sidebar) sidebar.classList.remove("open");
       } else if (targetView) {
-        window.navigateSchoolView(targetView);
+        navigateSchoolPortal({ view: targetView, dataset: activeDataset });
       }
     });
   });
+}
+
+/**
+ * Universal Hierarchical Back Navigation Handler
+ */
+export function handlePortalBack() {
+  if (internalNavStack.length > 0) {
+    history.back();
+  } else {
+    // If entered directly into a deeper view without prior session history stack:
+    if (currentPortalState.view === "student-detail") {
+      navigateSchoolPortal({
+        view: "student-list",
+        dataset: activeDataset,
+        filters: { ...activeStudentListFilters }
+      }, { replace: true });
+    } else {
+      navigateSchoolPortal({
+        view: "dashboard",
+        dataset: activeDataset
+      }, { replace: true });
+    }
+  }
+}
+
+/**
+ * Central State-Preserving Navigation Router
+ */
+export function navigateSchoolPortal(targetState, { replace = false, fromHistory = false } = {}) {
+  // Capture scroll position on outgoing view if available
+  if (currentPortalState && currentPortalState.view) {
+    currentPortalState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  }
+
+  const targetView = targetState.view || "dashboard";
+  // When opening/resetting Dashboard, always default strictly to School Data
+  const targetDataset = targetView === "dashboard"
+    ? (targetState.dataset || DATASET_KEYS.SCHOOL_DATA)
+    : (targetState.dataset || activeDataset);
+  const targetFilters = targetState.filters
+    ? { ...targetState.filters }
+    : (targetView === "student-list" ? { ...activeStudentListFilters } : { search: "", className: "", gender: "", category: "" });
+  const targetStudentId = targetState.studentId || null;
+  const targetTitle = targetState.title || VIEW_TITLES[targetView] || "School Portal";
+  const targetScrollY = targetState.scrollY || 0;
+
+  const fullState = {
+    view: targetView,
+    dataset: targetDataset,
+    filters: targetFilters,
+    studentId: targetStudentId,
+    title: targetTitle,
+    scrollY: targetScrollY
+  };
+
+  if (!fromHistory) {
+    if (replace) {
+      history.replaceState({ portalState: fullState }, "", window.location.href);
+      if (internalNavStack.length > 0) {
+        internalNavStack[internalNavStack.length - 1] = { ...fullState };
+      }
+    } else {
+      // Avoid duplicate history entries if navigating to exact same view and parameters
+      const isIdentical = currentPortalState &&
+        currentPortalState.view === fullState.view &&
+        currentPortalState.dataset === fullState.dataset &&
+        currentPortalState.studentId === fullState.studentId &&
+        JSON.stringify(currentPortalState.filters) === JSON.stringify(fullState.filters);
+
+      if (!isIdentical) {
+        internalNavStack.push({ ...currentPortalState });
+        history.pushState({ portalState: fullState }, "", window.location.href);
+      }
+    }
+  }
+
+  currentPortalState = { ...fullState };
+  activeDataset = targetDataset;
+
+  applySchoolPortalState(fullState);
+}
+
+/**
+ * Apply School Portal Navigation State to DOM
+ */
+function applySchoolPortalState(state) {
+  const { view, dataset, filters, studentId, title, scrollY } = state;
+
+  // 1. Sync active dataset
+  if (dataset && DATASET_LABELS[dataset]) {
+    activeDataset = dataset;
+    const topSelect = document.getElementById("dataset-selector");
+    if (topSelect && topSelect.value !== dataset) {
+      topSelect.value = dataset;
+    }
+  }
+
+  // 2. Sync sidebar active navigation link
+  const navLinks = document.querySelectorAll(".nav-link");
+  navLinks.forEach((l) => {
+    const v = l.getAttribute("data-view");
+    const ds = l.getAttribute("data-dataset");
+    if (v === view) {
+      l.classList.add("active");
+    } else if (view === "student-list" && ds === activeDataset) {
+      l.classList.add("active");
+    } else {
+      l.classList.remove("active");
+    }
+  });
+
+  // 3. Switch active view panel
+  const views = document.querySelectorAll(".school-view");
+  views.forEach((v) => {
+    if (v.id === `view-${view}`) v.classList.add("active");
+    else v.classList.remove("active");
+  });
+
+  const titleEl = document.getElementById("page-view-title");
+  if (titleEl) {
+    titleEl.textContent = VIEW_TITLES[view] || "School Portal";
+  }
+
+  // 4. Close mobile drawer & backdrop
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  if (sidebar) sidebar.classList.remove("open");
+  if (overlay) overlay.classList.remove("active");
+
+  // 5. View-specific DOM state restoration
+  if (view === "dashboard") {
+    renderDatasetDashboard();
+    window.scrollTo(0, scrollY || 0);
+  } else if (view === "student-list") {
+    activeStudentListFilters = { ...filters };
+
+    // Update list title
+    const listTitleEl = document.getElementById("student-list-view-title");
+    if (listTitleEl && title) {
+      listTitleEl.textContent = title;
+    }
+
+    // Sync search input and clear button
+    const searchInput = document.getElementById("student-list-search-input");
+    const clearBtn = document.getElementById("student-list-search-clear");
+    if (searchInput) {
+      searchInput.value = filters.search || "";
+      if (clearBtn) clearBtn.style.display = filters.search ? "flex" : "none";
+    }
+
+    // Sync class dropdown
+    const classSelect = document.getElementById("filter-class-select");
+    if (classSelect) {
+      const analytics = calculateDatasetAnalytics(activeDataset);
+      classSelect.innerHTML = `<option value="">All Classes</option>` + analytics.classList.map(c => `
+        <option value="${c.className}" ${c.className === filters.className ? "selected" : ""}>${formatClassDisplay(c.className)} (${c.count})</option>
+      `).join("");
+      classSelect.value = filters.className || "";
+    }
+
+    // Sync gender & category dropdowns
+    const genderSelect = document.getElementById("filter-gender-select");
+    if (genderSelect) genderSelect.value = filters.gender || "";
+
+    const catSelect = document.getElementById("filter-category-select");
+    if (catSelect) catSelect.value = filters.category || "";
+
+    renderStudentListCards();
+    updateExcelExportVisibility();
+    window.scrollTo(0, scrollY || 0);
+  } else if (view === "student-detail") {
+    if (studentId) {
+      renderStudentDetailContent(studentId);
+    }
+    window.scrollTo(0, scrollY || 0);
+  } else if (view === "school-info") {
+    renderSchoolInfoView();
+    window.scrollTo(0, 0);
+  } else if (view === "school-users") {
+    renderSchoolUsersTable();
+    window.scrollTo(0, 0);
+  } else if (view === "sessions") {
+    renderSchoolSessionsTable();
+    window.scrollTo(0, 0);
+  } else if (view === "age-calculator") {
+    initAgeCalculator();
+    window.scrollTo(0, scrollY || 0);
+  }
 }
 
 /**
@@ -276,13 +534,23 @@ function setupSchoolLiveListeners() {
 
   // 1. Subscribe to School Entity Document
   const schoolDocRef = doc(db, "schools", currentSchoolId);
-  unsubSchoolDoc = onSnapshot(schoolDocRef, (snap) => {
+  unsubSchoolDoc = onSnapshot(schoolDocRef, async (snap) => {
     if (snap.exists()) {
       currentSchoolEntity = snap.data();
       saveDocToCache("schools", currentSchoolId, currentSchoolEntity);
       renderSchoolHeaderInfo();
       renderSchoolInfoView();
       updateSchoolMetrics();
+
+      // Automatically refresh datasets if updated by Admin
+      if (currentSchoolEntity.datasets) {
+        await loadSchoolDatasets(currentSchoolId);
+        renderDatasetDashboard();
+        const studentListView = document.getElementById("view-student-list");
+        if (studentListView && studentListView.classList.contains("active")) {
+          renderStudentListCards();
+        }
+      }
     }
   }, (err) => console.warn("School live listener note:", err));
 
@@ -298,6 +566,24 @@ function setupSchoolLiveListeners() {
     saveCollectionToCache("users", liveSchoolUsers, "firebaseUid");
     updateSchoolMetrics();
     renderSchoolUsersTable();
+
+    // Propagate live permission changes or revoke access if deleted/deactivated
+    const currentUid = currentSchoolAccount?.firebaseUid || currentSchoolAccount?.uid;
+    if (currentUid && currentUid !== SUPER_ADMIN_UID) {
+      const me = liveSchoolUsers.find((u) => (u.firebaseUid || u.uid || u.id) === currentUid);
+      if (me) {
+        if (me.status === "Inactive" || me.status === "Deleted") {
+          console.warn("User account marked inactive or deleted. Revoking access.");
+          performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
+          return;
+        }
+        updateUserAccountData(me);
+      } else if (currentSchoolAccount?.type !== "school" && liveSchoolUsers.length > 0) {
+        console.warn("Current user no longer present in school user list. Revoking access.");
+        performForcedLogout("Your account has been deleted by an administrator.", "./index.html");
+        return;
+      }
+    }
   }, (err) => console.warn("Users live listener note:", err));
 
   // 3. Subscribe to Active Sessions belonging to this school
@@ -446,6 +732,7 @@ function renderSchoolInfoView() {
   setTxt("info-id", school.schoolId || currentSchoolId);
   setTxt("info-uid", school.firebaseUid || currentSchoolAccount?.firebaseUid || "—");
   setTxt("info-email", school.adminEmail || currentSchoolAccount?.email || "—");
+  setTxt("info-phone", school.phoneNumber || school.phone || "—");
   setTxt("info-address", school.address || "Campus Address");
   setTxt("info-logourl", school.logoUrl || "None configured");
 
@@ -765,6 +1052,7 @@ function setupSchoolForms() {
       const name = document.getElementById("edit-name").value.trim();
       const logoUrl = document.getElementById("edit-logo").value.trim();
       const email = document.getElementById("edit-email").value.trim();
+      const phone = document.getElementById("edit-phone") ? document.getElementById("edit-phone").value.trim() : "";
       const address = document.getElementById("edit-address").value.trim();
       const startingClass = document.getElementById("edit-start-class").value;
       const endingClass = document.getElementById("edit-end-class").value;
@@ -785,6 +1073,7 @@ function setupSchoolForms() {
         name,
         logoUrl,
         adminEmail: email,
+        phoneNumber: phone,
         address,
         startingClass,
         endingClass,
@@ -813,7 +1102,8 @@ function setupSchoolForms() {
             collection: "schools",
             docId: currentSchoolId,
             action: "update",
-            payload: updateData
+            payload: updateData,
+            schoolId: currentSchoolId
           });
           showSchoolToast("School info saved offline. Will sync when online.", "success");
         }
@@ -822,7 +1112,8 @@ function setupSchoolForms() {
           collection: "schools",
           docId: currentSchoolId,
           action: "update",
-          payload: updateData
+          payload: updateData,
+          schoolId: currentSchoolId
         });
         showSchoolToast("School info saved offline. Will sync when online.", "success");
       }
@@ -870,6 +1161,7 @@ window.openEditSchoolModal = () => {
   const nameInput = document.getElementById("edit-name");
   const logoInput = document.getElementById("edit-logo");
   const emailInput = document.getElementById("edit-email");
+  const phoneInput = document.getElementById("edit-phone");
   const addressInput = document.getElementById("edit-address");
   const startClassInput = document.getElementById("edit-start-class");
   const endClassInput = document.getElementById("edit-end-class");
@@ -880,6 +1172,7 @@ window.openEditSchoolModal = () => {
   if (nameInput) nameInput.value = school.schoolName || school.name || "";
   if (logoInput) logoInput.value = school.logoUrl || "";
   if (emailInput) emailInput.value = school.adminEmail || currentSchoolAccount?.email || "";
+  if (phoneInput) phoneInput.value = school.phoneNumber || school.phone || "";
   if (addressInput) addressInput.value = school.address || "";
   if (startClassInput) startClassInput.value = startClass;
   if (endClassInput) endClassInput.value = endClass;
@@ -964,6 +1257,9 @@ if (savePermsBtn) {
     if (idx >= 0) {
       liveSchoolUsers[idx] = updatedUserObj;
     }
+    if (targetUid === (currentSchoolAccount?.firebaseUid || currentSchoolAccount?.uid)) {
+      updateUserAccountData(updatedUserObj);
+    }
     renderSchoolUsersTable();
     await saveDocToCache("users", targetUid, updatedUserObj);
     closeModal("modal-edit-user-perms");
@@ -1007,9 +1303,17 @@ if (savePermsBtn) {
 function setupMobileDrawer() {
   const btn = document.getElementById("mobile-menu-btn");
   const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
   if (btn && sidebar) {
     btn.addEventListener("click", () => {
       sidebar.classList.toggle("open");
+      if (overlay) overlay.classList.toggle("active", sidebar.classList.contains("open"));
+    });
+  }
+  if (overlay && sidebar) {
+    overlay.addEventListener("click", () => {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("active");
     });
   }
 }
@@ -1022,7 +1326,8 @@ function setupMobileDrawer() {
  * Initialize Student Dashboard Datasets & Setup Interactions
  */
 async function initStudentDashboard() {
-  await loadSchoolDatasets(currentSchoolId, currentSchoolEntity || {});
+  activeDataset = DATASET_KEYS.SCHOOL_DATA;
+  await loadSchoolDatasets(currentSchoolId);
   setupStudentDashboardInteractions();
   renderDatasetDashboard();
 }
@@ -1034,6 +1339,7 @@ function setupStudentDashboardInteractions() {
   // 1. Top Bar Dataset Selector Dropdown
   const topSelect = document.getElementById("dataset-selector");
   if (topSelect) {
+    topSelect.value = DATASET_KEYS.SCHOOL_DATA;
     topSelect.addEventListener("change", (e) => {
       switchDataset(e.target.value);
     });
@@ -1077,6 +1383,8 @@ function setupStudentDashboardInteractions() {
   // 5. Explore Students Search Action
   const exploreInput = document.getElementById("explore-search-input");
   const exploreBtn = document.getElementById("explore-search-btn");
+  const exploreClear = document.getElementById("explore-search-clear");
+
   const triggerExplore = () => {
     const q = exploreInput ? exploreInput.value.trim() : "";
     const label = DATASET_LABELS[activeDataset] || "School Data";
@@ -1085,8 +1393,22 @@ function setupStudentDashboardInteractions() {
 
   if (exploreBtn) exploreBtn.addEventListener("click", triggerExplore);
   if (exploreInput) {
+    exploreInput.addEventListener("input", () => {
+      if (exploreClear) {
+        exploreClear.style.display = exploreInput.value.trim() ? "flex" : "none";
+      }
+    });
     exploreInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") triggerExplore();
+    });
+  }
+  if (exploreClear) {
+    exploreClear.addEventListener("click", () => {
+      if (exploreInput) {
+        exploreInput.value = "";
+        exploreInput.focus();
+      }
+      exploreClear.style.display = "none";
     });
   }
 
@@ -1094,14 +1416,21 @@ function setupStudentDashboardInteractions() {
   const backToDashBtn = document.getElementById("btn-back-to-dashboard");
   if (backToDashBtn) {
     backToDashBtn.addEventListener("click", () => {
-      window.navigateSchoolView("dashboard");
+      handlePortalBack();
     });
   }
 
   const backToListBtn = document.getElementById("btn-back-to-student-list");
   if (backToListBtn) {
     backToListBtn.addEventListener("click", () => {
-      window.navigateSchoolView("student-list");
+      handlePortalBack();
+    });
+  }
+
+  const backFromAgeCalcBtn = document.getElementById("btn-back-from-age-calculator");
+  if (backFromAgeCalcBtn) {
+    backFromAgeCalcBtn.addEventListener("click", () => {
+      handlePortalBack();
     });
   }
 
@@ -1112,43 +1441,256 @@ function setupStudentDashboardInteractions() {
   const filterGender = document.getElementById("filter-gender-select");
   const filterCategory = document.getElementById("filter-category-select");
 
+  const syncListFilterState = () => {
+    currentPortalState.filters = { ...activeStudentListFilters };
+    currentPortalState.scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    // Update header title dynamically if clearing/changing search
+    const label = DATASET_LABELS[activeDataset] || "School Data";
+    const listTitleEl = document.getElementById("student-list-view-title");
+    if (listTitleEl) {
+      if (activeStudentListFilters.search) {
+        listTitleEl.textContent = `Search: "${activeStudentListFilters.search}" (${label})`;
+      } else if (activeStudentListFilters.className) {
+        listTitleEl.textContent = `${formatClassDisplay(activeStudentListFilters.className)} (${label})`;
+      } else if (activeStudentListFilters.gender) {
+        listTitleEl.textContent = `${activeStudentListFilters.gender}s (${label})`;
+      } else if (activeStudentListFilters.category) {
+        listTitleEl.textContent = `${activeStudentListFilters.category} Category (${label})`;
+      } else {
+        listTitleEl.textContent = `All Records (${label})`;
+      }
+      currentPortalState.title = listTitleEl.textContent;
+    }
+
+    history.replaceState({ portalState: currentPortalState }, "", window.location.href);
+    renderStudentListCards();
+  };
+
   if (listSearch) {
     listSearch.addEventListener("input", () => {
       activeStudentListFilters.search = listSearch.value;
-      if (listClear) listClear.style.display = listSearch.value ? "block" : "none";
-      renderStudentListCards();
+      if (listClear) listClear.style.display = listSearch.value ? "flex" : "none";
+      syncListFilterState();
     });
   }
 
   if (listClear) {
     listClear.addEventListener("click", () => {
-      if (listSearch) listSearch.value = "";
+      if (listSearch) {
+        listSearch.value = "";
+        listSearch.focus();
+      }
       activeStudentListFilters.search = "";
       listClear.style.display = "none";
-      renderStudentListCards();
+      syncListFilterState();
     });
   }
 
   if (filterClass) {
     filterClass.addEventListener("change", (e) => {
       activeStudentListFilters.className = e.target.value;
-      renderStudentListCards();
+      syncListFilterState();
     });
   }
 
   if (filterGender) {
     filterGender.addEventListener("change", (e) => {
       activeStudentListFilters.gender = e.target.value;
-      renderStudentListCards();
+      syncListFilterState();
     });
   }
 
   if (filterCategory) {
     filterCategory.addEventListener("change", (e) => {
       activeStudentListFilters.category = e.target.value;
-      renderStudentListCards();
+      syncListFilterState();
     });
   }
+
+  // 8. Setup Context-Aware PDF & Excel Export
+  setupPdfExport();
+  setupExcelExport();
+}
+
+/**
+ * Setup Context-Aware PDF Export from Student List (both desktop & mobile triggers)
+ */
+function setupPdfExport() {
+  const pdfButtons = document.querySelectorAll(".btn-pdf-export");
+  if (!pdfButtons.length) return;
+
+  const handleExport = (clickedBtn) => {
+    if (clickedBtn.disabled) return;
+
+    // Fail safe if user account has been deactivated or deleted
+    if (currentSchoolAccount?.status === "Inactive" || currentSchoolAccount?.status === "Deleted") {
+      showSchoolToast("Access denied: account deactivated or deleted.", "error");
+      performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
+      return;
+    }
+
+    // Context-Aware: exact currently filtered & viewed students
+    const students = filterStudents(activeDataset, activeStudentListFilters);
+    if (!students || students.length === 0) {
+      showSchoolToast("No students to export in current view.", "info");
+      return;
+    }
+
+    // Open the Column Selection Popup (Centered Modal)
+    openPdfColumnModal({
+      datasetKey: activeDataset,
+      onToast: showSchoolToast,
+      onGenerate: async (columnConfig) => {
+        const result = await generateStudentListPdf({
+          school: currentSchoolEntity || { schoolId: currentSchoolId, schoolName: "School" },
+          datasetKey: activeDataset,
+          students,
+          filterContext: activeStudentListFilters,
+          columnConfig
+        });
+
+        if (result.success) {
+          showSchoolToast(`PDF generated successfully (${students.length} student${students.length === 1 ? '' : 's'}).`, "success");
+        } else {
+          showSchoolToast(result.error || "Failed to generate PDF.", "error");
+        }
+      }
+    });
+  };
+
+  pdfButtons.forEach(btn => {
+    btn.addEventListener("click", () => handleExport(btn));
+  });
+}
+
+/**
+ * Authoritative check: Does the currently logged-in user have Excel export permission?
+ * - Layer 1 & 2 Security: Evaluates real-time user permissions
+ * - Loading Safety: returns false if currentSchoolAccount not yet initialized
+ * - Super Admin clearance: honors SUPER_ADMIN_UID & admin types
+ * - Explicit user permissions: checks currentSchoolAccount.permissions.excelExport
+ * - Primary school accounts default to true if permissions object is not yet populated
+ */
+export function hasExcelExportPermission() {
+  if (!currentSchoolAccount) return false;
+  if (currentSchoolAccount.status === "Inactive" || currentSchoolAccount.status === "Deleted") return false;
+
+  // Super Admin bypass
+  const uid = currentSchoolAccount.firebaseUid || currentSchoolAccount.uid || auth?.currentUser?.uid;
+  if (uid === SUPER_ADMIN_UID || currentSchoolAccount.type === "admin") {
+    return true;
+  }
+
+  const perms = currentSchoolAccount.permissions;
+  if (perms && typeof perms.excelExport !== "undefined") {
+    return perms.excelExport === true;
+  }
+
+  // Primary school account defaults to true if permissions object omitted
+  if (currentSchoolAccount.type === "school") {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Update UI visibility of Excel export buttons across desktop, tablet, and mobile.
+ * - When permission is ON: button is visible (display: "")
+ * - When permission is OFF: button is completely hidden (display: "none")
+ * - If permission is revoked while confirmation modal is open, closes modal safely
+ */
+export function updateExcelExportVisibility() {
+  const isAllowed = hasExcelExportPermission();
+  const excelButtons = document.querySelectorAll(".btn-excel-export");
+  excelButtons.forEach(btn => {
+    if (isAllowed) {
+      btn.style.setProperty("display", "");
+      btn.removeAttribute("aria-hidden");
+      btn.removeAttribute("disabled");
+      btn.removeAttribute("hidden");
+      btn.classList.remove("hidden");
+    } else {
+      btn.style.setProperty("display", "none", "important");
+      btn.setAttribute("aria-hidden", "true");
+      btn.setAttribute("hidden", "hidden");
+      btn.classList.add("hidden");
+    }
+  });
+
+  if (!isAllowed) {
+    closeExcelConfirmModal();
+  }
+}
+
+/**
+ * Live update of user account permissions (e.g. from real-time Firestore monitor)
+ */
+export function updateUserAccountData(userData) {
+  if (!userData) return;
+  currentSchoolAccount = { ...(currentSchoolAccount || {}), ...userData };
+  updateExcelExportVisibility();
+}
+
+/**
+ * Setup Context-Aware Excel Export from Student List (both desktop & mobile triggers)
+ */
+function setupExcelExport() {
+  const excelButtons = document.querySelectorAll(".btn-excel-export");
+  if (!excelButtons.length) return;
+
+  // Enforce initial visibility state based on current user permissions
+  updateExcelExportVisibility();
+
+  const handleExcelExport = (clickedBtn) => {
+    if (clickedBtn && clickedBtn.disabled) return;
+
+    // Layer 2 Action Authorization Check: Fail safely if permission missing/revoked
+    if (!hasExcelExportPermission()) {
+      showSchoolToast("You do not have permission to export Excel files.", "error");
+      updateExcelExportVisibility();
+      return;
+    }
+
+    // Context-Aware: exact currently filtered & viewed students (0 extra Firebase calls)
+    const students = filterStudents(activeDataset, activeStudentListFilters);
+    if (!students || students.length === 0) {
+      showSchoolToast("No students to export in current view.", "info");
+      return;
+    }
+
+    // Open Centered Confirmation Modal (NO bottom sheet)
+    openExcelConfirmModal({
+      datasetKey: activeDataset,
+      students,
+      filterContext: activeStudentListFilters,
+      onConfirm: async () => {
+        // Re-verify authorization immediately prior to workbook generation
+        if (!hasExcelExportPermission()) {
+          showSchoolToast("Permission denied: You do not have Excel export clearance.", "error");
+          updateExcelExportVisibility();
+          return;
+        }
+
+        const result = await generateStudentListExcel({
+          school: currentSchoolEntity || { schoolId: currentSchoolId, schoolName: "School" },
+          datasetKey: activeDataset,
+          students,
+          isAuthorized: hasExcelExportPermission()
+        });
+
+        if (result.success) {
+          showSchoolToast(`Excel exported successfully (${students.length} student${students.length === 1 ? '' : 's'}).`, "success");
+        } else {
+          showSchoolToast(result.error || "Failed to generate Excel.", "error");
+        }
+      }
+    });
+  };
+
+  excelButtons.forEach(btn => {
+    btn.addEventListener("click", () => handleExcelExport(btn));
+  });
 }
 
 /**
@@ -1221,7 +1763,7 @@ function renderDatasetDashboard() {
       classGrid.innerHTML = analytics.classList.map(c => `
         <div class="class-strength-card" data-class="${c.className}" role="button" tabindex="0">
           <div class="class-card-header">
-            <span class="class-card-name">${c.className}</span>
+            <span class="class-card-name">${formatClassDisplay(c.className)}</span>
             <span class="class-card-count">${c.count}</span>
           </div>
           <div class="class-card-bar-bg">
@@ -1234,7 +1776,7 @@ function renderDatasetDashboard() {
       classGrid.querySelectorAll(".class-strength-card").forEach(card => {
         card.addEventListener("click", () => {
           const className = card.getAttribute("data-class");
-          openStudentListView({ className, title: `${className} Students (${analytics.datasetLabel})` });
+          openStudentListView({ className, title: `${formatClassDisplay(className)} Students (${analytics.datasetLabel})` });
         });
       });
     }
@@ -1282,39 +1824,18 @@ function renderDatasetDashboard() {
  * Open Dedicated Student List View
  */
 function openStudentListView({ search = "", className = "", gender = "", category = "", title = "" } = {}) {
-  activeStudentListFilters = { search, className, gender, category };
-
   const datasetLabel = DATASET_LABELS[activeDataset] || "School Data";
-  const titleEl = document.getElementById("student-list-view-title");
-  if (titleEl) {
-    titleEl.textContent = title || `All Students (${datasetLabel})`;
-  }
+  const finalTitle = title || (search
+    ? `Search: "${search}" (${datasetLabel})`
+    : (className ? `Class ${className} (${datasetLabel})` : (gender ? `${gender}s (${datasetLabel})` : (category ? `${category} Category (${datasetLabel})` : `All Students (${datasetLabel})`))));
 
-  // Sync toolbar input & selects
-  const searchInput = document.getElementById("student-list-search-input");
-  const clearBtn = document.getElementById("student-list-search-clear");
-  if (searchInput) {
-    searchInput.value = search;
-    if (clearBtn) clearBtn.style.display = search ? "block" : "none";
-  }
-
-  // Populate Class filter dropdown options based on current dataset classes
-  const classSelect = document.getElementById("filter-class-select");
-  if (classSelect) {
-    const analytics = calculateDatasetAnalytics(activeDataset);
-    classSelect.innerHTML = `<option value="">All Classes</option>` + analytics.classList.map(c => `
-      <option value="${c.className}" ${c.className === className ? "selected" : ""}>${c.className} (${c.count})</option>
-    `).join("");
-  }
-
-  const genderSelect = document.getElementById("filter-gender-select");
-  if (genderSelect) genderSelect.value = gender;
-
-  const catSelect = document.getElementById("filter-category-select");
-  if (catSelect) catSelect.value = category;
-
-  renderStudentListCards();
-  window.navigateSchoolView("student-list");
+  navigateSchoolPortal({
+    view: "student-list",
+    dataset: activeDataset,
+    filters: { search, className, gender, category },
+    title: finalTitle,
+    scrollY: 0
+  });
 }
 
 /**
@@ -1327,41 +1848,123 @@ function renderStudentListCards() {
 
   const filtered = filterStudents(activeDataset, activeStudentListFilters);
   if (countBadge) {
-    countBadge.textContent = `${filtered.length} Student${filtered.length === 1 ? '' : 's'}`;
+    const countText = `${filtered.length} Student${filtered.length === 1 ? '' : 's'}`;
+    const textEl = countBadge.querySelector(".count-val-text");
+    if (textEl) {
+      textEl.textContent = countText;
+    } else {
+      countBadge.textContent = countText;
+    }
   }
 
   if (filtered.length === 0) {
+    const allStudentsInDataset = getDatasetStudents(activeDataset);
+    let emptyTitle = "No Students Found";
+    let emptySubtitle = "No matching records found for the current search or filters.";
+
+    if (allStudentsInDataset.length === 0) {
+      emptyTitle = "No student data available.";
+      if (activeDataset === "school_data") {
+        emptySubtitle = "The master school student dataset has not been uploaded yet by Admin.";
+      } else if (activeDataset === "udise") {
+        emptySubtitle = "No weekly UDISE compliance dataset has been uploaded for this school.";
+      } else if (activeDataset === "three_point_zero") {
+        emptySubtitle = "No weekly 3.0 enrollment dataset has been uploaded for this school.";
+      }
+    }
+
     container.innerHTML = `
       <div class="student-empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <h4 style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;">No Students Found</h4>
-        <p style="font-size: 0.8rem; color: #64748b;">No matching records found for the current search or filters.</p>
+        <h4 style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 4px;">${emptyTitle}</h4>
+        <p style="font-size: 0.8rem; color: #64748b;">${emptySubtitle}</p>
       </div>
     `;
     return;
   }
 
+  const currentSearchQuery = (activeStudentListFilters.search || "").trim();
+
   container.innerHTML = filtered.map(st => {
     const initial = (st.studentName || "S").substring(0, 1).toUpperCase();
-    const subText = st.fatherName ? `Father: ${st.fatherName}` : (st.scholarNo ? `ID: ${st.scholarNo}` : "");
+    const displayClass = formatClassDisplay(st.className);
+
+    // Highlight student name safely preserving casing
+    const rawStudentName = st.studentName || 'Unnamed Student';
+    const highlightedName = highlightSearchMatches(rawStudentName, currentSearchQuery);
+
+    // Format dataset-specific identifier with highlighted matches if matching
+    let idBadgeHtml = "";
+    if (activeDataset === DATASET_KEYS.UDISE) {
+      const penVal = st.penNo || st.udiseId || "";
+      if (penVal) {
+        const highlightedPen = highlightSearchMatches(penVal, currentSearchQuery);
+        idBadgeHtml = `<span class="student-id-pill u-pen" title="Student PEN: ${escapeHtml(penVal)}">PEN: <strong>${highlightedPen}</strong></span>`;
+      }
+    } else if (activeDataset === DATASET_KEYS.THREE_POINT_ZERO) {
+      const samagraVal = st.samagraId || st.samagraMemberId || "";
+      if (samagraVal) {
+        const highlightedSamagra = highlightSearchMatches(samagraVal, currentSearchQuery);
+        idBadgeHtml = `<span class="student-id-pill u-samagra" title="Samagra ID: ${escapeHtml(samagraVal)}">Samagra: <strong>${highlightedSamagra}</strong></span>`;
+      }
+    } else {
+      const scholarVal = st.scholarNo || "";
+      if (scholarVal) {
+        const highlightedScholar = highlightSearchMatches(scholarVal, currentSearchQuery);
+        idBadgeHtml = `<span class="student-id-pill u-scholar" title="Scholar No: ${escapeHtml(scholarVal)}">Scholar: <strong>${highlightedScholar}</strong></span>`;
+      }
+    }
+
+    // Highlight father name if present
+    let fatherHtml = "";
+    if (st.fatherName && st.fatherName !== "—") {
+      const highlightedFather = highlightSearchMatches(st.fatherName, currentSearchQuery);
+      fatherHtml = `<span>Father: ${highlightedFather}</span>`;
+    }
+
+    // Additional match indicators for other searchable fields (Mother Name, Roll No)
+    let extraMatchHtml = "";
+    if (currentSearchQuery) {
+      const qLower = currentSearchQuery.toLowerCase();
+      if (st.motherName && st.motherName.toLowerCase().includes(qLower)) {
+        extraMatchHtml = `<span>Mother: ${highlightSearchMatches(st.motherName, currentSearchQuery)}</span>`;
+      } else if (st.rollNo && String(st.rollNo).toLowerCase().includes(qLower)) {
+        extraMatchHtml = `<span>Roll: ${highlightSearchMatches(String(st.rollNo), currentSearchQuery)}</span>`;
+      }
+    }
+
+    const subParts = [];
+    if (idBadgeHtml) subParts.push(idBadgeHtml);
+    if (fatherHtml) subParts.push(fatherHtml);
+    if (extraMatchHtml) subParts.push(extraMatchHtml);
+    const subTextHtml = subParts.join('<span class="sub-sep">•</span>');
 
     return `
       <div class="student-card-item" data-id="${st.id}" role="button" tabindex="0">
         <div class="student-card-main">
           <div class="student-card-avatar">${initial}</div>
           <div class="student-card-details">
-            <div class="student-card-name">${st.studentName}</div>
-            <div class="student-card-sub">${subText}</div>
+            <div class="student-card-name" title="${escapeHtml(rawStudentName)}">${highlightedName}</div>
+            ${subTextHtml ? `<div class="student-card-sub">${subTextHtml}</div>` : ''}
           </div>
         </div>
-        <div class="student-card-tags">
-          <span class="meta-pill class-pill">${st.className || 'Class —'}</span>
-          <span class="meta-pill gender-pill">${st.gender || '—'}</span>
-          <span class="meta-pill cat-pill">${st.category || 'GEN'}</span>
+        <div class="student-card-meta-group">
+          <div class="student-cell student-cell-class">
+            <span class="meta-label-mobile">Class</span>
+            <span class="meta-pill class-pill">${displayClass || '—'}</span>
+          </div>
+          <div class="student-cell student-cell-gender">
+            <span class="meta-label-mobile">Gender</span>
+            <span class="meta-pill gender-pill">${st.gender || '—'}</span>
+          </div>
+          <div class="student-cell student-cell-cat">
+            <span class="meta-label-mobile">Category</span>
+            <span class="meta-pill cat-pill">${st.category || 'GEN'}</span>
+          </div>
         </div>
-        <div class="student-card-chevron">
+        <div class="student-card-action">
           <span>View</span>
-          <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </div>
       </div>
     `;
@@ -1377,73 +1980,423 @@ function renderStudentListCards() {
 }
 
 /**
- * Open Dedicated Student Profile Screen
+ * Open Dedicated Student Profile Screen Router
  */
 function openStudentDetailView(studentId) {
+  const student = getStudentById(activeDataset, studentId);
+  if (!student) return;
+
+  navigateSchoolPortal({
+    view: "student-detail",
+    studentId,
+    dataset: activeDataset,
+    filters: { ...activeStudentListFilters }
+  });
+}
+
+/**
+ * Render Student Profile Screen Details
+ */
+function renderStudentDetailContent(studentId) {
   const student = getStudentById(activeDataset, studentId);
   if (!student) return;
 
   activeDetailStudent = student;
   const setTxt = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = val || "—";
+    if (el) el.textContent = val || "";
   };
 
   const initial = (student.studentName || "S").substring(0, 1).toUpperCase();
   setTxt("detail-avatar", initial);
-  setTxt("detail-name", student.studentName);
-  setTxt("detail-class-section", `${student.className || 'Class'} • Sec ${student.section || 'A'}`);
-  setTxt("detail-gender", student.gender || "—");
-  setTxt("detail-category", student.category || "GEN");
-  setTxt("detail-status", student.status || "Active");
+  setTxt("detail-name", student.studentName || "Unnamed Student");
   setTxt("detail-dataset-badge", DATASET_LABELS[activeDataset] || "School Data");
 
-  // Section 1: Basic Information
-  setTxt("detail-field-name", student.studentName);
-  setTxt("detail-field-dob", student.dob || "—");
-  setTxt("detail-field-gender", student.gender || "—");
-  setTxt("detail-field-class", `${student.className || '—'} (Sec ${student.section || 'A'})`);
-  setTxt("detail-field-roll", student.rollNo || "—");
-  setTxt("detail-field-scholar", student.scholarNo || student.id || "—");
-  setTxt("detail-field-admission", student.admissionDate || "—");
+  const classSectionEl = document.getElementById("detail-class-section");
+  const genderEl = document.getElementById("detail-gender");
+  const catEl = document.getElementById("detail-category");
+  const statusEl = document.getElementById("detail-status");
+  const sectionsContainer = document.getElementById("profile-sections-container");
 
-  // Section 2: Parent & Guardian
-  setTxt("detail-field-father", student.fatherName || "—");
-  setTxt("detail-field-mother", student.motherName || "—");
-  setTxt("detail-field-parent-contact", student.mobile || "—");
-  setTxt("detail-field-address", student.address || "Campus Address");
+  const normClass = normalizeClassLabel(student.className);
 
-  // Section 3: Dataset-Specific Fields
-  const datasetFieldsTitle = document.getElementById("detail-dataset-fields-title");
-  const datasetFieldsContainer = document.getElementById("detail-dataset-fields-container");
+  if (activeDataset === DATASET_KEYS.UDISE) {
+    // Requirements: Show ONLY Class, Name, Gender, Student PEN, Father Name, Social Category
+    if (classSectionEl) {
+      classSectionEl.style.display = "";
+      classSectionEl.textContent = formatClassDisplay(student.className);
+    }
+    if (genderEl) {
+      genderEl.style.display = "";
+      genderEl.textContent = student.gender || "—";
+    }
+    if (catEl) {
+      catEl.style.display = "";
+      catEl.textContent = student.category || "GEN";
+    }
+    if (statusEl) {
+      statusEl.style.display = "none";
+    }
 
-  if (datasetFieldsTitle && datasetFieldsContainer) {
-    if (activeDataset === DATASET_KEYS.SCHOOL_DATA) {
-      datasetFieldsTitle.textContent = "School Data Identifiers";
-      datasetFieldsContainer.innerHTML = `
-        <div class="profile-field-item"><span class="field-label">Internal Record ID</span><span class="field-value">${student.id}</span></div>
-        <div class="profile-field-item"><span class="field-label">Samagra ID</span><span class="field-value">${student.samagraId || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">PAN Number</span><span class="field-value">${student.panNo || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">Scholar Number</span><span class="field-value">${student.scholarNo || '—'}</span></div>
+    if (sectionsContainer) {
+      sectionsContainer.innerHTML = `
+        <div class="profile-section-card" style="grid-column: 1 / -1; max-width: 680px; margin: 0 auto; width: 100%;">
+          <div class="profile-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <span>UDISE Student Details</span>
+          </div>
+          <div class="profile-field-list">
+            <div class="profile-field-item"><span class="field-label">Class</span><span class="field-value">${normClass || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Name</span><span class="field-value">${student.studentName || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Gender</span><span class="field-value">${student.gender || '—'}</span></div>
+            <div class="profile-field-item profile-field-highlight">
+              <span class="field-label">Student PEN</span>
+              <span class="field-value-id pen-highlight" title="Click to copy Student PEN">${student.penNo || student.udiseId || '—'}</span>
+            </div>
+            <div class="profile-field-item"><span class="field-label">Father Name</span><span class="field-value">${student.fatherName && student.fatherName !== '—' ? student.fatherName : '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Social Category</span><span class="field-value">${student.category || '—'}</span></div>
+          </div>
+        </div>
       `;
-    } else if (activeDataset === DATASET_KEYS.UDISE) {
-      datasetFieldsTitle.textContent = "UDISE National Identifiers";
-      datasetFieldsContainer.innerHTML = `
-        <div class="profile-field-item"><span class="field-label">National Student Code (PEN)</span><span class="field-value">${student.penNo || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">UDISE Student ID</span><span class="field-value">${student.udiseId || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">UDISE School Code</span><span class="field-value">${student.udiseSchoolCode || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">Aadhar Verification</span><span class="field-value">${student.aadharNo || '—'}</span></div>
+    }
+  } else if (activeDataset === DATASET_KEYS.THREE_POINT_ZERO) {
+    // Requirements: Show ONLY Class, Samagra ID, Student Name, Father Name, Category, Gender
+    if (classSectionEl) {
+      classSectionEl.style.display = "";
+      classSectionEl.textContent = normClass ? `Class ${normClass}` : "Class —";
+    }
+    if (genderEl) {
+      genderEl.style.display = "";
+      genderEl.textContent = student.gender || "—";
+    }
+    if (catEl) {
+      catEl.style.display = "";
+      catEl.textContent = student.category || "GEN";
+    }
+    if (statusEl) {
+      statusEl.style.display = "none";
+    }
+
+    if (sectionsContainer) {
+      sectionsContainer.innerHTML = `
+        <div class="profile-section-card" style="grid-column: 1 / -1; max-width: 680px; margin: 0 auto; width: 100%;">
+          <div class="profile-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <span>3.0 Student Details</span>
+          </div>
+          <div class="profile-field-list">
+            <div class="profile-field-item"><span class="field-label">Class</span><span class="field-value">${normClass || '—'}</span></div>
+            <div class="profile-field-item profile-field-highlight">
+              <span class="field-label">Samagra ID</span>
+              <span class="field-value-id samagra-highlight" title="Click to copy Samagra ID">${student.samagraId || student.samagraMemberId || '—'}</span>
+            </div>
+            <div class="profile-field-item"><span class="field-label">Student Name</span><span class="field-value">${student.studentName || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Father Name</span><span class="field-value">${student.fatherName && student.fatherName !== '—' ? student.fatherName : '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Category</span><span class="field-value">${student.category || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Gender</span><span class="field-value">${student.gender || '—'}</span></div>
+          </div>
+        </div>
       `;
-    } else if (activeDataset === DATASET_KEYS.THREE_POINT_ZERO) {
-      datasetFieldsTitle.textContent = "Portal 3.0 Government Identifiers";
-      datasetFieldsContainer.innerHTML = `
-        <div class="profile-field-item"><span class="field-label">Portal 3.0 Record ID</span><span class="field-value">${student.id}</span></div>
-        <div class="profile-field-item"><span class="field-label">Samagra Member ID</span><span class="field-value">${student.samagraMemberId || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">Samagra Family ID</span><span class="field-value">${student.samagraFamilyId || '—'}</span></div>
-        <div class="profile-field-item"><span class="field-label">Enrollment Status</span><span class="field-value">${student.status || 'Enrolled'}</span></div>
+    }
+  } else {
+    // Master School Data: Full comprehensive student profile
+    if (classSectionEl) {
+      classSectionEl.style.display = "";
+      classSectionEl.textContent = `${normClass || 'Class'} • Sec ${student.section || 'A'}`;
+    }
+    if (genderEl) {
+      genderEl.style.display = "";
+      genderEl.textContent = student.gender || "—";
+    }
+    if (catEl) {
+      catEl.style.display = "";
+      catEl.textContent = student.category || "GEN";
+    }
+    if (statusEl) {
+      statusEl.style.display = "";
+      statusEl.textContent = student.status || "Active";
+    }
+
+    if (sectionsContainer) {
+      sectionsContainer.innerHTML = `
+        <!-- Section 1: Basic Details -->
+        <div class="profile-section-card">
+          <div class="profile-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <span>Basic Information</span>
+          </div>
+          <div class="profile-field-list">
+            <div class="profile-field-item"><span class="field-label">Student Name</span><span class="field-value">${student.studentName || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Date of Birth</span><span class="field-value">${student.dob || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Gender</span><span class="field-value">${student.gender || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Class & Section</span><span class="field-value">${formatClassDisplay(student.className)} (Sec ${student.section || 'A'})</span></div>
+            <div class="profile-field-item"><span class="field-label">Roll Number</span><span class="field-value">${student.rollNo || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Scholar / Reg. No</span><span class="field-value">${student.scholarNo || student.id || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Admission Date</span><span class="field-value">${student.admissionDate || '—'}</span></div>
+          </div>
+        </div>
+
+        <!-- Section 2: Parent Information -->
+        <div class="profile-section-card">
+          <div class="profile-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+            <span>Parent & Guardian Information</span>
+          </div>
+          <div class="profile-field-list">
+            <div class="profile-field-item"><span class="field-label">Father's Name</span><span class="field-value">${student.fatherName || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Mother's Name</span><span class="field-value">${student.motherName || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Primary Contact</span><span class="field-value">${student.mobile || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Residential Address</span><span class="field-value">${student.address || 'Campus Address'}</span></div>
+          </div>
+        </div>
+
+        <!-- Section 3: Dataset Identifiers -->
+        <div class="profile-section-card">
+          <div class="profile-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            <span>School Data Identifiers</span>
+          </div>
+          <div class="profile-field-list">
+            <div class="profile-field-item"><span class="field-label">Internal Record ID</span><span class="field-value">${student.id}</span></div>
+            <div class="profile-field-item"><span class="field-label">Samagra ID</span><span class="field-value">${student.samagraId || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">PAN Number</span><span class="field-value">${student.panNo || '—'}</span></div>
+            <div class="profile-field-item"><span class="field-label">Scholar Number</span><span class="field-value">${student.scholarNo || '—'}</span></div>
+          </div>
+        </div>
       `;
     }
   }
-
-  window.navigateSchoolView("student-detail");
 }
+
+/**
+ * ============================================================================
+ * AGE CALCULATOR CONTROLLER
+ * Mobile-First, Native PWA Age & Class Eligibility Calculation Engine
+ * ============================================================================
+ */
+let dobPickerInstance = null;
+let asofPickerInstance = null;
+
+function initAgeCalculator() {
+  const dobInput = document.getElementById("age-input-dob");
+  const asofInput = document.getElementById("age-input-asof");
+  const dobTrigger = document.getElementById("btn-trigger-dob");
+  const asofTrigger = document.getElementById("btn-trigger-asof");
+  const dobDisplay = document.getElementById("dob-display-val");
+  const asofDisplay = document.getElementById("asof-display-val");
+  const calcBtn = document.getElementById("btn-calculate-age");
+
+  const currentYear = new Date().getFullYear();
+
+  // 1. Create Date of Birth Picker instance
+  if (dobInput && !dobPickerInstance) {
+    dobPickerInstance = createDatePicker({
+      inputEl: dobInput,
+      triggerEl: dobTrigger,
+      displayEl: dobDisplay,
+      title: "Select Date of Birth",
+      minYear: 1950,
+      maxYear: currentYear, // DOB cannot be in the future
+      defaultDate: new Date(2020, 6, 31),
+      onCommit: () => {
+        clearAgeInputErrors();
+        // Hide previous results if user changes the date; user must tap Calculate
+        const resultsArea = document.getElementById("age-calc-results-area");
+        const emptyState = document.getElementById("age-calc-empty-state");
+        if (resultsArea && resultsArea.style.display !== "none") {
+          resultsArea.style.display = "none";
+          if (emptyState) emptyState.style.display = "block";
+        }
+      }
+    });
+  }
+
+  // 2. Create Calculate Age As Of Picker instance
+  if (asofInput && !asofPickerInstance) {
+    // Ensure default calculation date is strictly 31 July 2026
+    if (!asofInput.value || asofInput.value === "2026-09-30") {
+      asofInput.value = "2026-07-31";
+    }
+
+    asofPickerInstance = createDatePicker({
+      inputEl: asofInput,
+      triggerEl: asofTrigger,
+      displayEl: asofDisplay,
+      title: "Calculate Age As Of",
+      minYear: 1950,
+      maxYear: currentYear + 5, // Allow future eligibility planning
+      defaultDate: new Date(2026, 6, 31),
+      onCommit: () => {
+        clearAgeInputErrors();
+        // Hide previous results if user changes the date; user must tap Calculate
+        const resultsArea = document.getElementById("age-calc-results-area");
+        const emptyState = document.getElementById("age-calc-empty-state");
+        if (resultsArea && resultsArea.style.display !== "none") {
+          resultsArea.style.display = "none";
+          if (emptyState) emptyState.style.display = "block";
+        }
+      }
+    });
+  }
+
+  // 3. Primary Calculate Button
+  if (calcBtn && !calcBtn.dataset.bound) {
+    calcBtn.dataset.bound = "true";
+    calcBtn.addEventListener("click", () => {
+      executeAgeCalculation();
+    });
+  }
+}
+
+function clearAgeInputErrors() {
+  const dobError = document.getElementById("dob-error-msg");
+  const asofError = document.getElementById("asof-error-msg");
+  if (dobError) {
+    dobError.style.display = "none";
+    dobError.textContent = "";
+  }
+  if (asofError) {
+    asofError.style.display = "none";
+    asofError.textContent = "";
+  }
+}
+
+/**
+ * Executes Age Calculation and Class Eligibility Assessment
+ */
+function executeAgeCalculation() {
+  const dobInput = document.getElementById("age-input-dob");
+  const asofInput = document.getElementById("age-input-asof");
+  const dobError = document.getElementById("dob-error-msg");
+  const asofError = document.getElementById("asof-error-msg");
+  const resultsArea = document.getElementById("age-calc-results-area");
+  const emptyState = document.getElementById("age-calc-empty-state");
+  const resAgeVal = document.getElementById("res-student-age");
+  const eligList = document.getElementById("eligibility-cards-list");
+
+  clearAgeInputErrors();
+
+  if (!dobInput || !dobInput.value) {
+    if (dobError) {
+      dobError.textContent = "Please select the student's Date of Birth.";
+      dobError.style.display = "flex";
+    }
+    document.getElementById("btn-trigger-dob")?.focus();
+    return;
+  }
+
+  const dobDate = parseDateSafe(dobInput.value);
+  if (!dobDate) {
+    if (dobError) {
+      dobError.textContent = "Invalid Date of Birth format.";
+      dobError.style.display = "flex";
+    }
+    return;
+  }
+
+  // Default editable general calculation date is strictly 31 July 2026
+  const asofDate = parseDateSafe(asofInput ? asofInput.value : "2026-07-31");
+  if (!asofDate) {
+    if (asofError) {
+      asofError.textContent = "Invalid calculation date format.";
+      asofError.style.display = "flex";
+    }
+    return;
+  }
+
+  // Calculate General Student Age using user's chosen "Calculate Age As Of" date
+  const generalAge = calculateExactAge(dobDate, asofDate);
+  if (!generalAge || generalAge.isFuture) {
+    if (dobError) {
+      dobError.textContent = "Date of Birth cannot be after the calculation date.";
+      dobError.style.display = "flex";
+    }
+    return;
+  }
+
+  // 1. Display Bold, Focused Student Age
+  if (resAgeVal) {
+    resAgeVal.textContent = `${generalAge.years} Years ${generalAge.months} Months ${generalAge.days} Days`;
+  }
+  const statYears = document.getElementById("stat-years");
+  const statMonths = document.getElementById("stat-months");
+  const statDays = document.getElementById("stat-days");
+  if (statYears) statYears.textContent = generalAge.years;
+  if (statMonths) statMonths.textContent = generalAge.months;
+  if (statDays) statDays.textContent = generalAge.days;
+
+  // 2. Evaluate Standard Class Eligibility
+  // Rule:
+  // - Nursery/KG1/KG2 strictly calculated as of 31 July 2026
+  // - Class 1 strictly calculated as of 30 September 2026
+  const eligibility = evaluateClassEligibility(dobDate);
+  const eligContainer = document.getElementById("eligibility-container") || document.querySelector(".eligibility-container");
+
+  if (eligList) {
+    if (eligibility.allEligible.length === 0) {
+      // User request: Only show Class Eligibility if student is eligible for a class
+      if (eligContainer) eligContainer.style.display = "none";
+      eligList.innerHTML = "";
+    } else {
+      if (eligContainer) eligContainer.style.display = "block";
+      let cardsHtml = "";
+
+      // Render Primary Class card first with clean, concise presentation
+      if (eligibility.primary) {
+        const p = eligibility.primary;
+        cardsHtml += `
+          <div class="eligibility-card is-primary">
+            <div class="elig-card-header">
+              <span class="elig-tag tag-primary">PRIMARY CLASS</span>
+              <h3 class="elig-class-name">${p.className.toUpperCase()}</h3>
+            </div>
+            <div class="elig-details-grid">
+              <div class="elig-detail-item">
+                <span class="elig-detail-label">Student Age</span>
+                <span class="elig-detail-value">${p.age.years} Years ${p.age.months} Months ${p.age.days} Days</span>
+              </div>
+              <div class="elig-detail-item">
+                <span class="elig-detail-label">Calculated</span>
+                <span class="elig-detail-value">${p.dateUsed}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Also Eligible cards with identical clean format
+      eligibility.alsoEligible.forEach(item => {
+        cardsHtml += `
+          <div class="eligibility-card is-also">
+            <div class="elig-card-header">
+              <span class="elig-tag tag-also">ALSO ELIGIBLE FOR</span>
+              <h3 class="elig-class-name">${item.className.toUpperCase()}</h3>
+            </div>
+            <div class="elig-details-grid">
+              <div class="elig-detail-item">
+                <span class="elig-detail-label">Student Age</span>
+                <span class="elig-detail-value">${item.age.years} Years ${item.age.months} Months ${item.age.days} Days</span>
+              </div>
+              <div class="elig-detail-item">
+                <span class="elig-detail-label">Calculated</span>
+                <span class="elig-detail-value">${item.dateUsed}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      eligList.innerHTML = cardsHtml;
+    }
+  }
+
+  // Reveal results smoothly and hide empty state
+  if (emptyState) emptyState.style.display = "none";
+  if (resultsArea) resultsArea.style.display = "block";
+
+  // Smoothly scroll down so the results are clearly in view on mobile devices
+  if (window.innerWidth <= 768) {
+    resultsArea.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+

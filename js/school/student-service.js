@@ -6,12 +6,23 @@
 
 import {
   saveCollectionToCache,
-  getCollectionFromCache
+  getCollectionFromCache,
+  saveSyncMeta,
+  getSyncMeta
 } from "../offline-store.js";
 
 import {
+  db,
+  doc,
+  getDoc
+} from "../firebase.js";
+
+import {
   CANONICAL_CLASSES,
-  getClassRank
+  getClassRank,
+  normalizeClassLabel,
+  getNaturalClassOrder,
+  compareStudentsByClassAndName
 } from "../school-config.js";
 
 export const DATASET_KEYS = {
@@ -34,199 +45,273 @@ const memoryStore = {
   [DATASET_KEYS.THREE_POINT_ZERO]: []
 };
 
-const SAMPLE_NAMES = [
-  { name: "Aarav Sharma", father: "Ramesh Sharma", mother: "Sunita Sharma", gender: "Boy", category: "GEN" },
-  { name: "Ananya Patel", father: "Mahesh Patel", mother: "Geeta Patel", gender: "Girl", category: "OBC" },
-  { name: "Vihaan Verma", father: "Rajesh Verma", mother: "Pooja Verma", gender: "Boy", category: "SC" },
-  { name: "Isha Gupta", father: "Alok Gupta", mother: "Anita Gupta", gender: "Girl", category: "GEN" },
-  { name: "Reyansh Singh", father: "Dharmendra Singh", mother: "Kiran Singh", gender: "Boy", category: "OBC" },
-  { name: "Myra Rajput", father: "Suraj Rajput", mother: "Sushma Rajput", gender: "Girl", category: "GEN" },
-  { name: "Kabir Khan", father: "Imran Khan", mother: "Farida Khan", gender: "Boy", category: "GEN" },
-  { name: "Saanvi Joshi", father: "Dinesh Joshi", mother: "Meena Joshi", gender: "Girl", category: "GEN" },
-  { name: "Aditya Mishra", father: "Brijesh Mishra", mother: "Manju Mishra", gender: "Boy", category: "GEN" },
-  { name: "Diya Yadav", father: "Gopal Yadav", mother: "Rekha Yadav", gender: "Girl", category: "OBC" },
-  { name: "Aryan Sahu", father: "Pramod Sahu", mother: "Kavita Sahu", gender: "Boy", category: "OBC" },
-  { name: "Anushka Tiwari", father: "Vinod Tiwari", mother: "Shobha Tiwari", gender: "Girl", category: "GEN" },
-  { name: "Devansh Meena", father: "Ramvilas Meena", mother: "Kamla Meena", gender: "Boy", category: "ST" },
-  { name: "Riya Chouhan", father: "Harish Chouhan", mother: "Lata Chouhan", gender: "Girl", category: "SC" },
-  { name: "Krish Dubey", father: "Pankaj Dubey", mother: "Radha Dubey", gender: "Boy", category: "GEN" },
-  { name: "Tanvi Rathore", father: "Bhupendra Rathore", mother: "Asha Rathore", gender: "Girl", category: "GEN" },
-  { name: "Shaurya Thakur", father: "Vikram Thakur", mother: "Mamta Thakur", gender: "Boy", category: "OBC" },
-  { name: "Pari Malviya", father: "Ghanshyam Malviya", mother: "Geetanjali Malviya", gender: "Girl", category: "SC" },
-  { name: "Rudra Bhil", father: "Nathu Bhil", mother: "Janki Bhil", gender: "Boy", category: "ST" },
-  { name: "Navya Sen", father: "Jagdish Sen", mother: "Saroj Sen", gender: "Girl", category: "OBC" }
-];
-
 /**
- * Generate synthetic realistic datasets for a school based on its class range
+ * Initialize / override in-memory store (used for tests and rapid initialization)
  */
-function generateSchoolDatasets(schoolId, startingClass = "Nursery", endingClass = "Class 10") {
-  const startRank = Math.max(0, getClassRank(startingClass));
-  const endRank = Math.max(startRank, getClassRank(endingClass));
-  const activeClasses = CANONICAL_CLASSES.slice(startRank, endRank + 1).map(c => c.id);
-
-  const schoolDataStudents = [];
-  const udiseStudents = [];
-  const portal3Students = [];
-
-  let globalStudentId = 1001;
-
-  activeClasses.forEach((clsName, classIdx) => {
-    // Generate between 8 and 18 students per class
-    const count = 10 + ((classIdx * 7 + 3) % 9);
-    for (let i = 0; i < count; i++) {
-      const sample = SAMPLE_NAMES[(classIdx * 4 + i) % SAMPLE_NAMES.length];
-      const rollNo = (i + 1).toString().padStart(2, "0");
-      const section = i % 2 === 0 ? "A" : "B";
-      const scholarNo = `SCH-${schoolId}-${clsName.replace(/\s+/g, "")}-${rollNo}`;
-      const samagraId = (910000000 + globalStudentId).toString();
-      const panNo = `ABCPS${(8000 + globalStudentId)}K`;
-      const penNo = `PEN-${(1000000000 + globalStudentId)}`;
-      const udiseId = `UDISE-${schoolId}-${globalStudentId}`;
-      const dobYear = 2024 - (classIdx + 4);
-      const dobMonth = (1 + (i % 12)).toString().padStart(2, "0");
-      const dobDay = (1 + ((i * 3) % 28)).toString().padStart(2, "0");
-      const dob = `${dobYear}-${dobMonth}-${dobDay}`;
-      const mobile = `9826${(100000 + globalStudentId).toString().substring(0, 6)}`;
-      const address = `Ward ${1 + (i % 15)}, Civil Lines, Campus Vicinity`;
-
-      // 1. School Data Record
-      const schoolRecord = {
-        id: `SD-${schoolId}-${globalStudentId}`,
-        dataset: DATASET_KEYS.SCHOOL_DATA,
-        schoolId,
-        studentName: sample.name,
-        fatherName: sample.father,
-        motherName: sample.mother,
-        gender: sample.gender,
-        category: sample.category,
-        className: clsName,
-        section,
-        scholarNo,
-        rollNo,
-        dob,
-        mobile,
-        address,
-        samagraId,
-        panNo,
-        admissionDate: `${dobYear + 3}-06-15`,
-        status: "Active"
-      };
-      schoolDataStudents.push(schoolRecord);
-
-      // 2. UDISE Record (98% match with slight variation)
-      if ((i + classIdx) % 15 !== 0) {
-        udiseStudents.push({
-          id: `UD-${schoolId}-${globalStudentId}`,
-          dataset: DATASET_KEYS.UDISE,
-          schoolId,
-          studentName: sample.name,
-          fatherName: sample.father,
-          motherName: sample.mother,
-          gender: sample.gender,
-          category: sample.category,
-          className: clsName,
-          section,
-          penNo,
-          udiseId,
-          udiseSchoolCode: `UD${schoolId}99`,
-          aadharNo: `XXXX-XXXX-${(4000 + (globalStudentId % 6000))}`,
-          dob,
-          mobile,
-          address,
-          status: "Verified"
-        });
-      }
-
-      // 3. 3.0 Portal Record (92% match)
-      if ((i + classIdx) % 12 !== 0) {
-        portal3Students.push({
-          id: `P3-${schoolId}-${globalStudentId}`,
-          dataset: DATASET_KEYS.THREE_POINT_ZERO,
-          schoolId,
-          studentName: sample.name,
-          fatherName: sample.father,
-          motherName: sample.mother,
-          gender: sample.gender,
-          category: sample.category,
-          className: clsName,
-          section,
-          samagraMemberId: samagraId,
-          samagraFamilyId: (71000000 + (globalStudentId % 500)).toString(),
-          scholarNo,
-          dob,
-          mobile,
-          address,
-          status: "Enrolled"
-        });
-      }
-
-      globalStudentId++;
-    }
-  });
-
-  return {
-    [DATASET_KEYS.SCHOOL_DATA]: schoolDataStudents,
-    [DATASET_KEYS.UDISE]: udiseStudents,
-    [DATASET_KEYS.THREE_POINT_ZERO]: portal3Students
-  };
+export function initStudentServiceMemory({ schoolId = "SCH", schoolData = [], udise = [], threePointZero = [] } = {}) {
+  memoryStore.schoolId = schoolId;
+  memoryStore[DATASET_KEYS.SCHOOL_DATA] = schoolData;
+  memoryStore[DATASET_KEYS.UDISE] = udise;
+  memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = threePointZero;
 }
 
 /**
- * Initialize / Load datasets for a specific school
+ * Completely purge in-memory student datasets and sync signatures
+ * (Invoked during user revocation / forced logout to prevent data leak)
  */
-export async function loadSchoolDatasets(schoolId, schoolConfig = {}) {
-  if (!schoolId) return { [DATASET_KEYS.SCHOOL_DATA]: [], [DATASET_KEYS.UDISE]: [], [DATASET_KEYS.THREE_POINT_ZERO]: [] };
+export function clearStudentServiceMemory() {
+  memoryStore.schoolId = null;
+  memoryStore[DATASET_KEYS.SCHOOL_DATA] = [];
+  memoryStore[DATASET_KEYS.UDISE] = [];
+  memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = [];
+  lastSyncSignatures = {
+    school_data: "",
+    udise: "",
+    three_point_zero: ""
+  };
+}
+
+// Track dataset sync signatures to determine if fresh data arrived
+let lastSyncSignatures = {
+  school_data: "",
+  udise: "",
+  three_point_zero: ""
+};
+
+/**
+ * Helper to compute lightweight sync signature from dataset doc data
+ */
+function computeSignature(docData) {
+  if (!docData) return "empty";
+  const count = docData.recordCount || docData.students?.length || 0;
+  const time = docData.uploadedAt?.toMillis?.() || docData.updatedAt?.toMillis?.() || 0;
+  return `${count}_${time}`;
+}
+
+/**
+ * Initialize / Load datasets for a specific school.
+ * Cache-First Architecture:
+ * 1. Restores latest valid cached data immediately from IndexedDB into memory and UI.
+ * 2. Does NOT repeatedly request data from Firebase during normal navigation or interaction.
+ * 3. Only performs full Firebase fetches when explicitly forced (Manual Sync) or when cache is empty.
+ *
+ * @param {string} schoolId
+ * @param {Object} [options]
+ * @param {boolean} [options.forceRefresh=false] - Force live fetch from Cloud Firestore (e.g. Manual Sync)
+ * @returns {Promise<{ school_data: Array, udise: Array, three_point_zero: Array, updated: boolean }>}
+ */
+export async function loadSchoolDatasets(schoolId, { forceRefresh = false } = {}) {
+  if (!schoolId) {
+    return {
+      [DATASET_KEYS.SCHOOL_DATA]: [],
+      [DATASET_KEYS.UDISE]: [],
+      [DATASET_KEYS.THREE_POINT_ZERO]: [],
+      updated: false
+    };
+  }
 
   const cleanSchoolId = schoolId.trim().toUpperCase();
 
-  // If already in memory for this school, return instantly
-  if (memoryStore.schoolId === cleanSchoolId && memoryStore[DATASET_KEYS.SCHOOL_DATA].length > 0) {
+  // If already in memory for this school and not forced, return immediately (0 Firebase reads)
+  if (
+    !forceRefresh &&
+    memoryStore.schoolId === cleanSchoolId &&
+    (memoryStore[DATASET_KEYS.SCHOOL_DATA].length > 0 ||
+     memoryStore[DATASET_KEYS.UDISE].length > 0 ||
+     memoryStore[DATASET_KEYS.THREE_POINT_ZERO].length > 0)
+  ) {
     return {
       [DATASET_KEYS.SCHOOL_DATA]: memoryStore[DATASET_KEYS.SCHOOL_DATA],
       [DATASET_KEYS.UDISE]: memoryStore[DATASET_KEYS.UDISE],
-      [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO]
+      [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO],
+      updated: false
     };
   }
 
-  // 1. Try loading from IndexedDB
-  const cachedSD = await getCollectionFromCache(`students_sd_${cleanSchoolId}`);
-  const cachedUD = await getCollectionFromCache(`students_ud_${cleanSchoolId}`);
-  const cachedP3 = await getCollectionFromCache(`students_p3_${cleanSchoolId}`);
+  // 1. Restore from local IndexedDB cache first
+  const [cachedSD, cachedUD, cachedP3] = await Promise.all([
+    getCollectionFromCache(`students_sd_${cleanSchoolId}`),
+    getCollectionFromCache(`students_ud_${cleanSchoolId}`),
+    getCollectionFromCache(`students_p3_${cleanSchoolId}`)
+  ]);
 
-  if (cachedSD && cachedSD.length > 0) {
-    memoryStore.schoolId = cleanSchoolId;
-    memoryStore[DATASET_KEYS.SCHOOL_DATA] = cachedSD;
-    memoryStore[DATASET_KEYS.UDISE] = cachedUD || [];
-    memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = cachedP3 || [];
-    return {
-      [DATASET_KEYS.SCHOOL_DATA]: memoryStore[DATASET_KEYS.SCHOOL_DATA],
-      [DATASET_KEYS.UDISE]: memoryStore[DATASET_KEYS.UDISE],
-      [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO]
-    };
-  }
-
-  // 2. Otherwise generate seed data matching configured class range and persist to IndexedDB
-  const generated = generateSchoolDatasets(
-    cleanSchoolId,
-    schoolConfig.startingClass || "Nursery",
-    schoolConfig.endingClass || "Class 10"
+  const hasCachedData = (
+    (cachedSD && cachedSD.length > 0) ||
+    (cachedUD && cachedUD.length > 0) ||
+    (cachedP3 && cachedP3.length > 0)
   );
 
-  memoryStore.schoolId = cleanSchoolId;
-  memoryStore[DATASET_KEYS.SCHOOL_DATA] = generated[DATASET_KEYS.SCHOOL_DATA];
-  memoryStore[DATASET_KEYS.UDISE] = generated[DATASET_KEYS.UDISE];
-  memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = generated[DATASET_KEYS.THREE_POINT_ZERO];
+  if (hasCachedData && !forceRefresh) {
+    memoryStore.schoolId = cleanSchoolId;
+    memoryStore[DATASET_KEYS.SCHOOL_DATA] = cachedSD || [];
+    memoryStore[DATASET_KEYS.UDISE] = cachedUD || [];
+    memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = cachedP3 || [];
 
-  await saveCollectionToCache(`students_sd_${cleanSchoolId}`, memoryStore[DATASET_KEYS.SCHOOL_DATA], "id");
-  await saveCollectionToCache(`students_ud_${cleanSchoolId}`, memoryStore[DATASET_KEYS.UDISE], "id");
-  await saveCollectionToCache(`students_p3_${cleanSchoolId}`, memoryStore[DATASET_KEYS.THREE_POINT_ZERO], "id");
+    return {
+      [DATASET_KEYS.SCHOOL_DATA]: memoryStore[DATASET_KEYS.SCHOOL_DATA],
+      [DATASET_KEYS.UDISE]: memoryStore[DATASET_KEYS.UDISE],
+      [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO],
+      updated: false
+    };
+  }
+
+  // 2. Fetch from Cloud Firestore if forced (Manual Sync) or cache was completely empty while online
+  if (navigator.onLine) {
+    try {
+      const [snapSD, snapUD, snapP3] = await Promise.all([
+        getDoc(doc(db, "student_datasets", `${cleanSchoolId}_school_data`)),
+        getDoc(doc(db, "student_datasets", `${cleanSchoolId}_udise`)),
+        getDoc(doc(db, "student_datasets", `${cleanSchoolId}_three_point_zero`))
+      ]);
+
+      const firestoreSD = snapSD.exists() ? (snapSD.data().students || []) : [];
+      const firestoreUD = snapUD.exists() ? (snapUD.data().students || []) : [];
+      const firestoreP3 = snapP3.exists() ? (snapP3.data().students || []) : [];
+
+      const sigSD = snapSD.exists() ? `${firestoreSD.length}_${snapSD.data().uploadedAt?.toMillis?.() || 0}` : "empty";
+      const sigUD = snapUD.exists() ? `${firestoreUD.length}_${snapUD.data().uploadedAt?.toMillis?.() || 0}` : "empty";
+      const sigP3 = snapP3.exists() ? `${firestoreP3.length}_${snapP3.data().uploadedAt?.toMillis?.() || 0}` : "empty";
+
+      const hasChanged = (
+        memoryStore.schoolId !== cleanSchoolId ||
+        sigSD !== lastSyncSignatures.school_data ||
+        sigUD !== lastSyncSignatures.udise ||
+        sigP3 !== lastSyncSignatures.three_point_zero
+      );
+
+      lastSyncSignatures = {
+        school_data: sigSD,
+        udise: sigUD,
+        three_point_zero: sigP3
+      };
+
+      // Synchronize to IndexedDB cache
+      await Promise.all([
+        saveCollectionToCache(`students_sd_${cleanSchoolId}`, firestoreSD, "id"),
+        saveCollectionToCache(`students_ud_${cleanSchoolId}`, firestoreUD, "id"),
+        saveCollectionToCache(`students_p3_${cleanSchoolId}`, firestoreP3, "id"),
+        saveSyncMeta(cleanSchoolId, {
+          signatures: lastSyncSignatures,
+          lastSyncedAt: Date.now()
+        })
+      ]);
+
+      // Update in-memory store
+      memoryStore.schoolId = cleanSchoolId;
+      memoryStore[DATASET_KEYS.SCHOOL_DATA] = firestoreSD;
+      memoryStore[DATASET_KEYS.UDISE] = firestoreUD;
+      memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = firestoreP3;
+
+      return {
+        [DATASET_KEYS.SCHOOL_DATA]: firestoreSD,
+        [DATASET_KEYS.UDISE]: firestoreUD,
+        [DATASET_KEYS.THREE_POINT_ZERO]: firestoreP3,
+        updated: hasChanged
+      };
+    } catch (err) {
+      console.warn("Could not load student datasets from Firestore, falling back to local cache:", err);
+    }
+  }
+
+  // 3. Fallback: populate memory from whatever local cache exists
+  memoryStore.schoolId = cleanSchoolId;
+  memoryStore[DATASET_KEYS.SCHOOL_DATA] = cachedSD || [];
+  memoryStore[DATASET_KEYS.UDISE] = cachedUD || [];
+  memoryStore[DATASET_KEYS.THREE_POINT_ZERO] = cachedP3 || [];
 
   return {
     [DATASET_KEYS.SCHOOL_DATA]: memoryStore[DATASET_KEYS.SCHOOL_DATA],
     [DATASET_KEYS.UDISE]: memoryStore[DATASET_KEYS.UDISE],
-    [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO]
+    [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO],
+    updated: false
   };
+}
+
+/**
+ * Smart Lightweight Freshness Check (~Every 1 hour or on Reconnection).
+ * Reads ONLY the lightweight school document metadata to check if datasets were updated.
+ * Does NOT blindly download full student datasets unless a change is detected.
+ *
+ * @param {string} schoolId
+ * @returns {Promise<{ updated: boolean, changed: Array<string> }>}
+ */
+export async function checkAndSyncDatasets(schoolId) {
+  if (!schoolId || !navigator.onLine) {
+    return { updated: false, changed: [] };
+  }
+
+  const cleanSchoolId = schoolId.trim().toUpperCase();
+
+  try {
+    // 1. Fetch single lightweight school doc containing datasets metadata
+    const schoolDocRef = doc(db, "schools", cleanSchoolId);
+    const schoolSnap = await getDoc(schoolDocRef);
+    if (!schoolSnap.exists()) {
+      return { updated: false, changed: [] };
+    }
+
+    const schoolData = schoolSnap.data();
+    const serverDatasets = schoolData.datasets || {};
+    const localMeta = await getSyncMeta(cleanSchoolId);
+    const localSignatures = localMeta?.signatures || lastSyncSignatures || {};
+
+    const datasetsToFetch = [];
+
+    // Check School Data metadata
+    const sdMeta = serverDatasets.school_data;
+    const sdSig = sdMeta ? `${sdMeta.recordCount || 0}_${sdMeta.updatedAt?.toMillis?.() || 0}` : "";
+    if (sdSig && sdSig !== localSignatures.school_data) {
+      datasetsToFetch.push({ key: DATASET_KEYS.SCHOOL_DATA, cacheKey: `students_sd_${cleanSchoolId}`, docKey: "school_data", sig: sdSig });
+    }
+
+    // Check UDISE metadata
+    const udMeta = serverDatasets.udise;
+    const udSig = udMeta ? `${udMeta.recordCount || 0}_${udMeta.updatedAt?.toMillis?.() || 0}` : "";
+    if (udSig && udSig !== localSignatures.udise) {
+      datasetsToFetch.push({ key: DATASET_KEYS.UDISE, cacheKey: `students_ud_${cleanSchoolId}`, docKey: "udise", sig: udSig });
+    }
+
+    // Check 3.0 metadata
+    const p3Meta = serverDatasets.three_point_zero;
+    const p3Sig = p3Meta ? `${p3Meta.recordCount || 0}_${p3Meta.updatedAt?.toMillis?.() || 0}` : "";
+    if (p3Sig && p3Sig !== localSignatures.three_point_zero) {
+      datasetsToFetch.push({ key: DATASET_KEYS.THREE_POINT_ZERO, cacheKey: `students_p3_${cleanSchoolId}`, docKey: "three_point_zero", sig: p3Sig });
+    }
+
+    // If no changes detected on server, DO NOTHING (0 student dataset reads!)
+    if (datasetsToFetch.length === 0) {
+      return { updated: false, changed: [] };
+    }
+
+    // Only fetch the specific dataset(s) that changed
+    const changedKeys = [];
+    for (const item of datasetsToFetch) {
+      try {
+        const snap = await getDoc(doc(db, "student_datasets", `${cleanSchoolId}_${item.docKey}`));
+        const students = snap.exists() ? (snap.data().students || []) : [];
+
+        await saveCollectionToCache(item.cacheKey, students, "id");
+        memoryStore[item.key] = students;
+        lastSyncSignatures[item.docKey] = item.sig;
+        changedKeys.push(item.key);
+      } catch (fetchErr) {
+        console.warn(`Failed to fetch updated dataset ${item.key}:`, fetchErr);
+      }
+    }
+
+    if (changedKeys.length > 0) {
+      await saveSyncMeta(cleanSchoolId, {
+        signatures: lastSyncSignatures,
+        lastSyncedAt: Date.now()
+      });
+      return { updated: true, changed: changedKeys };
+    }
+
+    return { updated: false, changed: [] };
+  } catch (err) {
+    console.warn("Lightweight freshness check note:", err);
+    return { updated: false, changed: [] };
+  }
 }
 
 /**
@@ -234,41 +319,67 @@ export async function loadSchoolDatasets(schoolId, schoolConfig = {}) {
  */
 export function getDatasetTotals() {
   return {
-    [DATASET_KEYS.SCHOOL_DATA]: memoryStore[DATASET_KEYS.SCHOOL_DATA].length,
-    [DATASET_KEYS.UDISE]: memoryStore[DATASET_KEYS.UDISE].length,
-    [DATASET_KEYS.THREE_POINT_ZERO]: memoryStore[DATASET_KEYS.THREE_POINT_ZERO].length
+    [DATASET_KEYS.SCHOOL_DATA]: (memoryStore[DATASET_KEYS.SCHOOL_DATA] || []).length,
+    [DATASET_KEYS.UDISE]: (memoryStore[DATASET_KEYS.UDISE] || []).length,
+    [DATASET_KEYS.THREE_POINT_ZERO]: (memoryStore[DATASET_KEYS.THREE_POINT_ZERO] || []).length
   };
 }
 
 /**
- * Get student records for a specific dataset
+ * Get student records for a specific dataset, sorted universally by:
+ * 1. Natural Class Order (Nursery -> KG1 -> KG2 -> 1 -> ... -> 12)
+ * 2. Student Name Alphabetically A-Z (case-insensitive, trimmed)
  */
 export function getDatasetStudents(datasetKey = DATASET_KEYS.SCHOOL_DATA) {
-  return memoryStore[datasetKey] || [];
+  const students = memoryStore[datasetKey] || [];
+  return [...students].sort(compareStudentsByClassAndName);
 }
 
 /**
  * Calculate comprehensive dashboard analytics for the chosen dataset
+ * Applies natural class ordering: Nursery -> KG1 -> KG2 -> 1 -> 2 -> ... -> 12
  */
 export function calculateDatasetAnalytics(datasetKey = DATASET_KEYS.SCHOOL_DATA) {
-  const students = getDatasetStudents(datasetKey);
+  const students = memoryStore[datasetKey] || [];
   const total = students.length;
 
-  // 1. Class Distribution
+  if (total === 0) {
+    return {
+      datasetKey,
+      datasetLabel: DATASET_LABELS[datasetKey] || "School Data",
+      totalStudents: 0,
+      classList: [],
+      gender: {
+        boys: 0,
+        girls: 0,
+        other: 0,
+        boysPercent: 0,
+        girlsPercent: 0
+      },
+      categories: [
+        { category: "GEN", count: 0, percent: 0 },
+        { category: "OBC", count: 0, percent: 0 },
+        { category: "SC", count: 0, percent: 0 },
+        { category: "ST", count: 0, percent: 0 }
+      ]
+    };
+  }
+
+  // 1. Class Distribution with Natural School Order
   const classMap = {};
   students.forEach((st) => {
-    const c = st.className || "Unassigned";
+    const c = normalizeClassLabel(st.className);
     classMap[c] = (classMap[c] || 0) + 1;
   });
 
   const classList = Object.keys(classMap).map(cls => ({
     className: cls,
-    rank: getClassRank(cls),
+    rank: getNaturalClassOrder(cls),
     count: classMap[cls],
     percent: total > 0 ? Math.round((classMap[cls] / total) * 100) : 0
   })).sort((a, b) => {
-    if (a.rank !== -1 && b.rank !== -1) return a.rank - b.rank;
-    return a.className.localeCompare(b.className);
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    return a.className.localeCompare(b.className, undefined, { numeric: true });
   });
 
   // 2. Gender Breakdown
@@ -326,18 +437,19 @@ export function calculateDatasetAnalytics(datasetKey = DATASET_KEYS.SCHOOL_DATA)
 }
 
 /**
- * Filter students in memory by class, gender, category, and search query
+ * Filter students in memory by class, gender, category, and search query.
+ * All results are GUARANTEED to be sorted alphabetically by student name (A–Z, case-insensitive, trimmed).
  */
 export function filterStudents(datasetKey, { search = "", className = "", gender = "", category = "" } = {}) {
-  const students = getDatasetStudents(datasetKey);
+  const students = memoryStore[datasetKey] || [];
   const q = search.trim().toLowerCase();
-  const targetClass = className.trim().toLowerCase();
+  const targetClass = className ? normalizeClassLabel(className).toLowerCase() : "";
   const targetGender = gender.trim().toLowerCase();
   const targetCategory = category.trim().toUpperCase();
 
-  return students.filter(st => {
-    // 1. Class filter
-    if (targetClass && (st.className || "").toLowerCase() !== targetClass) {
+  const filtered = students.filter(st => {
+    // 1. Class filter (compares normalized class labels)
+    if (targetClass && normalizeClassLabel(st.className).toLowerCase() !== targetClass) {
       return false;
     }
 
@@ -374,12 +486,39 @@ export function filterStudents(datasetKey, { search = "", className = "", gender
 
     return true;
   });
+
+  // Search Relevance Ranking (Requirement 9 & 10):
+  // When a search query is entered, prioritize matches in Student Name first.
+  // Both priority groups preserve class-first natural ordering then Student Name A-Z.
+  if (q) {
+    const studentNameMatches = [];
+    const otherFieldMatches = [];
+
+    for (const st of filtered) {
+      const matchName = (st.studentName || "").toLowerCase().includes(q);
+      if (matchName) {
+        studentNameMatches.push(st);
+      } else {
+        otherFieldMatches.push(st);
+      }
+    }
+
+    studentNameMatches.sort(compareStudentsByClassAndName);
+    otherFieldMatches.sort(compareStudentsByClassAndName);
+
+    return [...studentNameMatches, ...otherFieldMatches];
+  }
+
+  // Universal Student Sorting Rule when no search term is active:
+  // 1. Natural Class Order (Nursery -> KG1 -> KG2 -> 1 -> 2 -> ... -> 12)
+  // 2. Student Name Alphabetically A-Z (case-insensitive, trimmed)
+  return filtered.sort(compareStudentsByClassAndName);
 }
 
 /**
  * Find single student by ID
  */
 export function getStudentById(datasetKey, studentId) {
-  const students = getDatasetStudents(datasetKey);
+  const students = memoryStore[datasetKey] || [];
   return students.find(s => s.id === studentId);
 }

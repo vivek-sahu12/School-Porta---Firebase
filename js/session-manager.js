@@ -72,6 +72,8 @@ import {
   clearOfflineCache
 } from "./offline-store.js";
 
+import { clearStudentServiceMemory } from "./school/student-service.js";
+
 // Constants
 export const INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 Hours
 const ACTIVITY_THROTTLE_MS = 15000; // Update stored timestamp at most once every 15 seconds of activity
@@ -302,21 +304,25 @@ export async function verifyAuthoritativeSession(user, onRevoked) {
     // 1. Verify User Document
     const userDocRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userDocRef);
-    if (userSnap.exists()) {
-      const userData = userSnap.data();
-      if (userData.status === "Inactive") {
-        if (onRevoked) onRevoked("Your account has been deactivated by the administrator.");
-        return { valid: false, reason: "account_inactive" };
-      }
+    if (!userSnap.exists()) {
+      console.warn("Authoritative session check: User record deleted in Firestore.");
+      if (onRevoked) onRevoked("Your account has been deleted by an administrator.");
+      return { valid: false, reason: "account_deleted" };
+    }
 
-      // Check School Status
-      if (userData.schoolId) {
-        const schoolDocRef = doc(db, "schools", userData.schoolId);
-        const schoolSnap = await getDoc(schoolDocRef);
-        if (schoolSnap.exists() && schoolSnap.data().status === "Inactive") {
-          if (onRevoked) onRevoked("This school institution has been deactivated. Access suspended.");
-          return { valid: false, reason: "school_inactive" };
-        }
+    const userData = userSnap.data();
+    if (userData.status === "Inactive" || userData.status === "Deleted") {
+      if (onRevoked) onRevoked("Your account has been deactivated by the administrator.");
+      return { valid: false, reason: "account_inactive" };
+    }
+
+    // Check School Status
+    if (userData.schoolId) {
+      const schoolDocRef = doc(db, "schools", userData.schoolId);
+      const schoolSnap = await getDoc(schoolDocRef);
+      if (schoolSnap.exists() && schoolSnap.data().status === "Inactive") {
+        if (onRevoked) onRevoked("This school institution has been deactivated. Access suspended.");
+        return { valid: false, reason: "school_inactive" };
       }
     }
 
@@ -433,7 +439,22 @@ export async function performForcedLogout(reason, redirectUrl = "./index.html") 
     sessionStorage.setItem(STORAGE_KEY_LOGOUT_REASON, reason || "Your session has ended.");
     localStorage.removeItem(STORAGE_KEY_SESSION_ID);
     localStorage.removeItem(STORAGE_KEY_LAST_ACTIVITY);
+    localStorage.removeItem("current_school_id");
     sessionStorage.removeItem(STORAGE_KEY_SESSION_ID);
+    sessionStorage.removeItem("current_school_id");
+
+    // Invalidate and purge local caches and in-memory student datasets
+    try {
+      await clearOfflineCache();
+    } catch (cErr) {
+      console.warn("Offline cache purge note:", cErr);
+    }
+
+    try {
+      clearStudentServiceMemory();
+    } catch (mErr) {
+      console.warn("Memory store clear note:", mErr);
+    }
 
     await signOut(auth);
   } catch (err) {

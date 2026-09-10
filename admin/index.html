@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Super Admin Login - School Data Portal</title>
   <meta name="description" content="Centralized Super Administrator Login for School Data Portal">
   <meta name="theme-color" content="#1e3a8a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin Portal">
+  <meta name="mobile-web-app-capable" content="yes">
 
   <!-- Favicon & PWA Icons -->
   <link rel="icon" href="../icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="../icon.svg">
-  <link rel="manifest" href="../manifest.json">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -136,6 +140,13 @@
     if (window.location.protocol === 'file:') {
       const banner = document.getElementById('protocol-warning');
       if (banner) banner.style.display = 'block';
+    }
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch((err) => {
+          console.warn('Admin ServiceWorker registration:', err);
+        });
+      });
     }
   </script>
   <script type="module" src="../js/admin/login.js"></script>

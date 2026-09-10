@@ -12,5 +12,7 @@ export default defineConfig({
         adminDashboard: resolve(__dirname, "admin/dashboard.html"),
       },
     },
+    // Copy admin/manifest.json to dist
+    copyPublicDir: true,
   },
 });

@@ -24,7 +24,9 @@ import {
   orderBy,
   limit,
   serverTimestamp,
-  increment
+  increment,
+  runTransaction,
+  writeBatch
 } from "firebase/firestore";
 
 // Firebase web app configuration
@@ -74,5 +76,7 @@ export {
   orderBy,
   limit,
   serverTimestamp,
-  increment
+  increment,
+  runTransaction,
+  writeBatch
 };

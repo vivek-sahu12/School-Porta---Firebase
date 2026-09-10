@@ -2,15 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Admin Panel - School Data Portal</title>
   <meta name="description" content="Super Admin Control Panel">
   <meta name="theme-color" content="#1e3a8a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin Panel">
+  <meta name="mobile-web-app-capable" content="yes">
 
   <!-- Favicon & PWA Icons -->
   <link rel="icon" href="../icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="../icon.svg">
-  <link rel="manifest" href="../manifest.json">
+  <link rel="manifest" href="./manifest.json">
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -92,6 +96,33 @@
       </div>
     </aside>
 
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav id="mobile-bottom-nav" class="mobile-bottom-nav">
+      <button class="bottom-nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="bottom-nav-item" data-view="schools">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
+        <span>Schools</span>
+      </button>
+      <button class="bottom-nav-item" data-view="accounts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+        <span>Accounts</span>
+      </button>
+      <button class="bottom-nav-item" data-view="sessions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="12" x="3" y="4" rx="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg>
+        <span>Sessions</span>
+      </button>
+      <button class="bottom-nav-item" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
     <!-- ====================================================================
          Main Wrapper
          ==================================================================== -->
@@ -104,11 +135,11 @@
           <div class="top-bar-title" id="page-view-title">Dashboard</div>
         </div>
         <div class="top-bar-right">
-          <button class="btn btn-secondary btn-sm" onclick="window.navigateView('settings')">
+          <button class="btn btn-secondary btn-sm desktop-only" onclick="window.navigateView('settings')">
             <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             Admin Profile
           </button>
-          <button class="btn btn-primary btn-sm" onclick="window.openAddAccountModal()">
+          <button class="btn btn-primary btn-sm desktop-only" onclick="window.openAddAccountModal()">
             <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Add Existing Account
           </button>
@@ -126,27 +157,47 @@
             <p>Monitor registered school institutions, authenticated accounts, and real-time device sessions.</p>
           </div>
 
-          <!-- Simplified 4-Card System Overview -->
+          <!-- Professional System Overview Strip (Compact 4-Card Responsive Grid) -->
           <div class="metrics-strip">
             <div class="metric-box">
-              <div class="metric-box-title">Total Schools</div>
+              <div class="metric-box-top">
+                <div class="metric-box-title">Total Schools</div>
+                <div class="metric-icon-bubble ib-schools">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path></svg>
+                </div>
+              </div>
               <div class="metric-box-number" id="metric-total-schools">0</div>
               <div class="metric-box-sub">Registered institutions</div>
             </div>
             <div class="metric-box">
-              <div class="metric-box-title">Active Schools</div>
-              <div class="metric-box-number" id="metric-active-schools" style="color: #16a34a;">0</div>
-              <div class="metric-box-sub">Operational access</div>
+              <div class="metric-box-top">
+                <div class="metric-box-title">Total Students</div>
+                <div class="metric-icon-bubble ib-students">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                </div>
+              </div>
+              <div class="metric-box-number" id="metric-total-students" style="color: #2563eb;">0</div>
+              <div class="metric-box-sub">Enrolled roster records</div>
             </div>
             <div class="metric-box">
-              <div class="metric-box-title">Inactive Schools</div>
-              <div class="metric-box-number" id="metric-inactive-schools" style="color: #d97706;">0</div>
-              <div class="metric-box-sub">Suspended access</div>
+              <div class="metric-box-top">
+                <div class="metric-box-title">Active Users</div>
+                <div class="metric-icon-bubble ib-users">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+                </div>
+              </div>
+              <div class="metric-box-number" id="metric-active-users" style="color: #16a34a;">0</div>
+              <div class="metric-box-sub">Active staff accounts</div>
             </div>
             <div class="metric-box">
-              <div class="metric-box-title">Active Sessions</div>
-              <div class="metric-box-number" id="metric-active-sessions" style="color: #7c3aed;">0</div>
-              <div class="metric-box-sub">Live connected devices</div>
+              <div class="metric-box-top">
+                <div class="metric-box-title">Pending Actions</div>
+                <div class="metric-icon-bubble ib-pending">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+              </div>
+              <div class="metric-box-number" id="metric-pending-actions" style="color: #d97706;">0</div>
+              <div class="metric-box-sub">Suspended or inactive</div>
             </div>
           </div>
 
@@ -168,6 +219,7 @@
                   <tr>
                     <th>School Name</th>
                     <th>School ID</th>
+                    <th>Phone</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Sessions</th>
@@ -206,6 +258,7 @@
                   <tr>
                     <th>School Name</th>
                     <th>School ID</th>
+                    <th>Phone</th>
                     <th>Status</th>
                     <th>Users</th>
                     <th>Active Devices</th>
@@ -290,10 +343,7 @@
                     <div class="info-label">Primary Login Email</div>
                     <div class="info-value" id="sa-email">—</div>
                   </div>
-                  <div class="info-item">
-                    <div class="info-label">School Firebase UID (Auth)</div>
-                    <div class="info-value chip-uid" id="sa-uid" style="font-size: 0.85rem;">—</div>
-                  </div>
+                  <!-- Firebase UID hidden from user-facing UI -->
                   <div class="info-item">
                     <div class="info-label">Account Status</div>
                     <div class="info-value" id="sa-status"><span class="badge badge-active">Active</span></div>
@@ -335,10 +385,7 @@
                     <div class="info-label">Unique School ID</div>
                     <div class="info-value" id="info-school-id" style="color: #2563eb;">—</div>
                   </div>
-                  <div class="info-item">
-                    <div class="info-label">Primary School Firebase UID</div>
-                    <div class="info-value" style="font-family: monospace; font-size: 0.85rem;" id="info-school-uid">—</div>
-                  </div>
+                  <!-- Firebase UID hidden from user-facing UI -->
                   <div class="info-item">
                     <div class="info-label">Operating Status</div>
                     <div class="info-value" id="info-school-status">—</div>
@@ -346,6 +393,10 @@
                   <div class="info-item">
                     <div class="info-label">Admin Contact Email</div>
                     <div class="info-value" id="info-school-email">—</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Phone Number</div>
+                    <div class="info-value" id="info-school-phone">—</div>
                   </div>
                   <div class="info-item">
                     <div class="info-label">Campus Address</div>
@@ -385,7 +436,7 @@
                     <table class="clean-table">
                       <thead>
                         <tr>
-                          <th>User Name & UID</th>
+                          <th>User Name</th>
                           <th>Email</th>
                           <th>Status</th>
                           <th>Device Limit</th>
@@ -417,9 +468,8 @@
                     <table class="clean-table">
                       <thead>
                         <tr>
-                          <th>Account / User UID</th>
+                          <th>Account</th>
                           <th>Device Name</th>
-                          <th>Device ID</th>
                           <th>Login Time</th>
                           <th>Last Active</th>
                           <th>Status</th>
@@ -439,17 +489,123 @@
             <div id="school-tab-student-data" class="school-tab-pane">
               <div class="section-panel-card">
                 <div class="panel-header">
-                  <div class="panel-title">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-                    Student Data Module
+                  <div>
+                    <div class="panel-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                      Student Data Upload & Management
+                    </div>
+                    <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">
+                      Manage independent student datasets for <strong id="sd-student-school-id-badge" style="color: var(--primary);">—</strong>.
+                    </div>
                   </div>
                 </div>
-                <div style="background: #fafafa; border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 32px; text-align: center;">
-                  <svg style="width: 40px; height: 40px; color: var(--text-subtle); margin-bottom: 10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                  <h4 style="font-size: 1rem; font-weight: 700; color: var(--text-main);">Student Roster Module Ready</h4>
-                  <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 460px; margin: 4px auto 0;">
-                    All student records are connected directly to <strong>School ID: <span id="sd-student-placeholder-id"></span></strong>. Student ingestion, add, and export workflows will be configured according to your specifications.
-                  </p>
+
+                <!-- 3 Dataset Selector Tabs (Matching existing .type-switcher pattern) -->
+                <div class="type-switcher" style="max-width: 520px; margin-bottom: 20px;">
+                  <button type="button" class="type-btn active" id="btn-tab-school-data" onclick="window.switchStudentUploadDataset('school_data')">
+                    School Data
+                  </button>
+                  <button type="button" class="type-btn" id="btn-tab-udise" onclick="window.switchStudentUploadDataset('udise')">
+                    UDISE
+                  </button>
+                  <button type="button" class="type-btn" id="btn-tab-p3" onclick="window.switchStudentUploadDataset('three_point_zero')">
+                    3.0
+                  </button>
+                </div>
+
+                <!-- Active Dataset Details & Upload Box -->
+                <div id="student-dataset-container">
+                  <!-- Dataset Context Card -->
+                  <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                      <div>
+                        <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 2px;">Selected Dataset</div>
+                        <h3 id="dataset-title-display" style="font-size: 1.15rem; font-weight: 700; color: var(--text-main); margin: 0;">School Data</h3>
+                      </div>
+                      <span id="dataset-type-badge" class="badge badge-active" style="padding: 4px 10px;">Master Student Data</span>
+                    </div>
+                    <p id="dataset-desc-display" style="font-size: 0.825rem; color: var(--text-muted); margin: 0 0 14px 0; line-height: 1.5;">
+                      Permanent master student records for the school institution.
+                    </p>
+
+                    <!-- Dataset Status Summary Grid -->
+                    <div class="info-grid" style="margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border);">
+                      <div class="info-item">
+                        <div class="info-label">Current Record Count</div>
+                        <div class="info-value" id="dataset-status-count" style="font-weight: 700; color: var(--primary);">0 Records</div>
+                      </div>
+                      <div class="info-item">
+                        <div class="info-label">Last Updated</div>
+                        <div class="info-value" id="dataset-status-updated">Not uploaded yet</div>
+                      </div>
+                      <div class="info-item">
+                        <div class="info-label">Source File</div>
+                        <div class="info-value" id="dataset-status-file" style="font-size: 0.825rem; word-break: break-all;">—</div>
+                      </div>
+                      <div class="info-item">
+                        <div class="info-label">Unique Student Identifier</div>
+                        <div class="info-value" id="dataset-status-unique-id" style="font-weight: 600;">Scholar No / Admission No</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Required Columns Indicator -->
+                  <div style="margin-bottom: 20px;">
+                    <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-main); margin-bottom: 8px;">Required Excel Headers (Case-Insensitive):</div>
+                    <div id="dataset-headers-pills" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                      <!-- Populated dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Upload Zone -->
+                  <div style="border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 24px; text-align: center; background: #ffffff; margin-bottom: 20px;" id="upload-dropzone">
+                    <input type="file" id="student-excel-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleStudentExcelFileSelected(event)">
+                    
+                    <svg style="width: 42px; height: 42px; color: var(--primary); margin-bottom: 10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="12" y1="18" x2="12" y2="12"></line>
+                      <polyline points="9 15 12 12 15 15"></polyline>
+                    </svg>
+
+                    <h4 style="font-size: 0.975rem; font-weight: 700; color: var(--text-main); margin: 0 0 6px 0;">Upload <span id="upload-zone-dataset-label">School Data</span> Excel File</h4>
+                    <p style="font-size: 0.825rem; color: var(--text-muted); max-width: 440px; margin: 0 auto 16px auto;">
+                      Select a valid Excel workbook (.xlsx). Columns will be validated automatically before database storage.
+                    </p>
+
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('student-excel-input').click()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                      Choose Excel File
+                    </button>
+
+                    <!-- Selected File Info Row (initially hidden) -->
+                    <div id="upload-file-info-bar" style="display: none; margin-top: 16px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius-sm); text-align: left; align-items: center; justify-content: space-between;">
+                      <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="width: 20px; height: 20px; flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <div style="overflow: hidden;">
+                          <div id="upload-file-name" style="font-size: 0.85rem; font-weight: 600; color: #15803d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">students.xlsx</div>
+                          <div id="upload-file-meta" style="font-size: 0.75rem; color: #166534;">12.4 KB • Ready to validate</div>
+                        </div>
+                      </div>
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="window.clearSelectedStudentFile()" style="padding: 4px 8px; font-size: 0.75rem;">Remove</button>
+                    </div>
+                  </div>
+
+                  <!-- Real-time Status / Alert Banner (Hidden by default) -->
+                  <div id="upload-status-alert" style="display: none; padding: 12px 16px; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 20px; line-height: 1.4;">
+                    <!-- Dynamically populated status message -->
+                  </div>
+
+                  <!-- Upload Action Bar -->
+                  <div style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <div id="upload-loading-spinner" style="display: none; align-items: center; gap: 8px; font-size: 0.825rem; color: var(--text-muted);">
+                      <span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
+                      <span id="upload-loading-text">Processing Excel file...</span>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="btn-submit-upload" disabled onclick="window.executeStudentDatasetUpload()">
+                      Upload to <span id="btn-upload-dataset-label">School Data</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -521,10 +677,9 @@
                     <th>School</th>
                     <th>User Account</th>
                     <th>Device / Browser</th>
-                    <th>Device ID</th>
                     <th>Login Time</th>
                     <th>Last Active</th>
-                    <th>Active Devices / Limit</th>
+                    <th>Devices / Limit</th>
                     <th>Status</th>
                     <th style="text-align: right;">Action</th>
                   </tr>
@@ -574,10 +729,7 @@
                   <div class="info-label">Authenticated Email</div>
                   <div class="info-value" id="prof-admin-email">—</div>
                 </div>
-                <div class="info-item">
-                  <div class="info-label">Firebase Auth UID (Master Guard)</div>
-                  <div class="info-value chip-uid" id="prof-admin-uid" style="font-size: 0.85rem;">FSe6FQsJrKaDVqqjcO4jv2EIkfp2</div>
-                </div>
+                <!-- Firebase UID hidden from user-facing UI -->
                 <div class="info-item">
                   <div class="info-label">Account Privilege & Status</div>
                   <div class="info-value">
@@ -650,7 +802,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     Administrative Audit Records
                   </div>
-                  <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">Chronological timeline of institutional and configuration actions.</div>
+                  <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">Latest 10 administrative records (historical records beyond 10 are automatically pruned).</div>
                 </div>
                 <input type="text" id="admin-logs-search" class="form-input" placeholder="Search audit logs..." style="max-width: 240px; padding: 6px 12px;">
               </div>
@@ -726,22 +878,26 @@
               <input type="email" id="acc-school-email" class="form-input" placeholder="admin@school.edu">
             </div>
             <div class="form-group">
+              <label class="form-label" for="acc-school-phone">Phone Number</label>
+              <input type="tel" id="acc-school-phone" class="form-input" placeholder="e.g. +1 (555) 000-0000">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
               <label class="form-label" for="acc-school-status">Initial Status</label>
               <select id="acc-school-status" class="form-select">
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="acc-school-address">Campus Address</label>
-              <input type="text" id="acc-school-address" class="form-input" placeholder="City, State">
-            </div>
             <div class="form-group">
               <label class="form-label" for="acc-school-device-limit">School Account Device Limit</label>
               <input type="number" id="acc-school-device-limit" class="form-input" min="1" max="15" value="3">
             </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="acc-school-address">Campus Address</label>
+            <input type="text" id="acc-school-address" class="form-input" placeholder="City, State">
           </div>
 
           <div class="form-row">
@@ -989,9 +1145,13 @@
               <input type="email" id="edit-school-email" class="form-input" placeholder="admin@school.edu">
             </div>
             <div class="form-group">
-              <label class="form-label" for="edit-school-address">Campus Address</label>
-              <input type="text" id="edit-school-address" class="form-input" placeholder="City, State">
+              <label class="form-label" for="edit-school-phone">Phone Number</label>
+              <input type="tel" id="edit-school-phone" class="form-input" placeholder="e.g. +1 (555) 000-0000">
             </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-school-address">Campus Address</label>
+            <input type="text" id="edit-school-address" class="form-input" placeholder="City, State">
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -1212,6 +1372,38 @@
     </div>
   </div>
 
+
+  <!-- Modal 6: Double-Confirmation Delete School User -->
+  <div id="modal-delete-user" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header" style="background: #fef2f2; border-bottom-color: #fecaca;">
+        <h3 class="modal-title" style="color: #dc2626;" id="del-user-modal-title">Delete School User</h3>
+        <button class="modal-close" onclick="window.closeModal('modal-delete-user')">&times;</button>
+      </div>
+      <div class="modal-body" id="del-user-modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 8px;">
+          Are you sure you want to delete <span id="del-user-name" style="font-weight: 800; color: #dc2626;"></span>?
+        </p>
+        <p style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px;">
+          This will remove the user account, revoke institutional access, and terminate all active sessions connected under this account.
+        </p>
+      </div>
+      <div class="modal-footer" id="del-user-modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-delete-user')">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch((err) => {
+          console.warn('Admin Dashboard ServiceWorker registration:', err);
+        });
+      });
+    }
+  </script>
   <script type="module" src="../js/admin/dashboard.js"></script>
 </body>
 </html>
