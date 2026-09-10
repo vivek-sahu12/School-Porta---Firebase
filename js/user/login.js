@@ -16,6 +16,7 @@ import {
 } from "../firebase.js";
 
 import { enforceUserSessionRetention } from "../session-manager.js";
+import { SUPER_ADMIN_UID } from "../admin/firestore-service.js";
 
 // DOM Elements
 const loginForm = document.getElementById("school-login-form");
@@ -126,6 +127,11 @@ document.addEventListener("DOMContentLoaded", () => {
 // If user is already authenticated and active, seamlessly forward to dashboard on page reopen
 onAuthStateChanged(auth, async (user) => {
   if (user) {
+    // If the authenticated user is Super Admin, do not process as School User
+    if (user.uid === SUPER_ADMIN_UID) {
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     if (params.has("reason")) {
       return; // Do not auto-redirect if user was deliberately redirected to login with a reason

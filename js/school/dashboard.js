@@ -34,6 +34,7 @@ import {
   updateUserAccountData 
 } from "./school-ui.js";
 import { checkAndSyncDatasets } from "./student-service.js";
+import { SUPER_ADMIN_UID } from "../admin/firestore-service.js";
 
 // DOM Elements
 const pageLoader = document.getElementById("page-loader");
@@ -111,6 +112,12 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) {
     // If not authenticated, redirect to School Portal login (index.html)
     window.location.replace("./index.html");
+    return;
+  }
+
+  if (user.uid === SUPER_ADMIN_UID) {
+    // Super Admin should not be handled by School Dashboard; redirect to Super Admin Panel
+    window.location.replace("./admin/dashboard.html");
     return;
   }
 

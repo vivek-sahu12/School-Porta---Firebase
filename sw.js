@@ -1,7 +1,7 @@
 // Progressive Web App Service Worker for School Data Portal & Admin Panel
 // Provides network caching, offline support, and fulfills PWA installability requirements
 
-const CACHE_NAME = "school-data-portal-v1";
+const CACHE_NAME = "school-data-portal-v2";
 const PRECACHE_URLS = [
   "./icon.svg"
 ];
@@ -34,13 +34,15 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Do NOT intercept Firebase, Google API, or non-GET requests
+  // Do NOT intercept Firebase, Google API, CDN, or non-GET requests
   if (
     event.request.method !== "GET" ||
     url.hostname.includes("firestore.googleapis.com") ||
     url.hostname.includes("identitytoolkit.googleapis.com") ||
     url.hostname.includes("firebaseio.com") ||
     url.hostname.includes("gstatic.com") ||
+    url.hostname.includes("jsdelivr.net") ||
+    url.hostname.includes("googleapis.com") ||
     url.protocol.startsWith("chrome-extension")
   ) {
     return;
