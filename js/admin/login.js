@@ -51,19 +51,21 @@ function clearError() {
   }
 }
 
+let isSubmitting = false;
+
 function setLoading(isLoading) {
   if (!loginBtn) return;
   if (isLoading) {
     loginBtn.classList.add("is-loading");
     loginBtn.disabled = true;
-    if (emailInput) emailInput.disabled = true;
-    if (passwordInput) passwordInput.disabled = true;
+    if (emailInput) emailInput.readOnly = true;
+    if (passwordInput) passwordInput.readOnly = true;
     if (togglePasswordBtn) togglePasswordBtn.disabled = true;
   } else {
     loginBtn.classList.remove("is-loading");
     loginBtn.disabled = false;
-    if (emailInput) emailInput.disabled = false;
-    if (passwordInput) passwordInput.disabled = false;
+    if (emailInput) emailInput.readOnly = false;
+    if (passwordInput) passwordInput.readOnly = false;
     if (togglePasswordBtn) togglePasswordBtn.disabled = false;
   }
 }
@@ -94,7 +96,8 @@ onAuthStateChanged(auth, (user) => {
 
 // 2. Toggle password visibility
 if (togglePasswordBtn && passwordInput) {
-  togglePasswordBtn.addEventListener("click", () => {
+  togglePasswordBtn.addEventListener("click", (e) => {
+    e.preventDefault();
     const isPassword = passwordInput.type === "password";
     passwordInput.type = isPassword ? "text" : "password";
     
@@ -114,57 +117,81 @@ if (togglePasswordBtn && passwordInput) {
 if (emailInput) emailInput.addEventListener("input", clearError);
 if (passwordInput) passwordInput.addEventListener("input", clearError);
 
-// 4. Handle Form Submission
-if (loginForm) {
-  loginForm.addEventListener("submit", async (e) => {
+// 4. Handle Form Submission (Robust Mobile Touch & Desktop Support)
+async function handleLoginSubmit(e) {
+  if (e) {
     e.preventDefault();
-    clearError();
+    e.stopPropagation();
+  }
 
-    const email = emailInput ? emailInput.value.trim() : "";
-    const password = passwordInput ? passwordInput.value : "";
+  if (isSubmitting) return;
 
-    if (!email) {
-      showError("Please enter your Super Admin email.");
-      if (emailInput) emailInput.focus();
-      return;
-    }
+  clearError();
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      showError("Please enter a valid email address.");
-      if (emailInput) emailInput.focus();
-      return;
-    }
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
+  const password = passwordInput ? passwordInput.value : "";
 
-    if (!password) {
-      showError("Please enter your password.");
-      if (passwordInput) passwordInput.focus();
-      return;
-    }
+  if (!email) {
+    showError("Please enter your Super Admin email.");
+    if (emailInput) emailInput.focus();
+    return;
+  }
 
-    setLoading(true);
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    showError("Please enter a valid email address.");
+    if (emailInput) emailInput.focus();
+    return;
+  }
 
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+  if (!password) {
+    showError("Please enter your password.");
+    if (passwordInput) passwordInput.focus();
+    return;
+  }
 
-      if (user) {
-        if (user.uid === SUPER_ADMIN_UID) {
-          // Authorized Super Admin
-          localStorage.setItem("portal_last_activity", String(Date.now()));
-          window.location.replace("./dashboard.html");
-        } else {
-          // Deny access if authenticated UID does not match Super Admin UID
-          await signOut(auth);
-          showError("Access Denied: This account is not authorized to access the Super Admin Panel.");
-          setLoading(false);
-        }
+  // Dismiss mobile virtual keyboard
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
+
+  isSubmitting = true;
+  setLoading(true);
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    if (user) {
+      if (user.uid === SUPER_ADMIN_UID) {
+        // Authorized Super Admin
+        localStorage.setItem("portal_last_activity", String(Date.now()));
+        window.location.replace("./dashboard.html");
+      } else {
+        // Deny access if authenticated UID does not match Super Admin UID
+        await signOut(auth);
+        showError("Access Denied: This account is not authorized to access the Super Admin Panel.");
+        setLoading(false);
+        isSubmitting = false;
       }
-    } catch (error) {
-      console.error("Super Admin Authentication Error:", error.code, error.message);
-      const friendlyMessage = getFriendlyErrorMessage(error.code);
-      showError(friendlyMessage);
-      setLoading(false);
+    }
+  } catch (error) {
+    console.error("Super Admin Authentication Error:", error.code, error.message);
+    const friendlyMessage = getFriendlyErrorMessage(error.code);
+    showError(friendlyMessage);
+    setLoading(false);
+    isSubmitting = false;
+  }
+}
+
+if (loginForm) {
+  loginForm.addEventListener("submit", handleLoginSubmit);
+}
+
+if (loginBtn) {
+  loginBtn.addEventListener("click", (e) => {
+    if (!isSubmitting) {
+      handleLoginSubmit(e);
     }
   });
 }

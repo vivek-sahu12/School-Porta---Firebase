@@ -45,17 +45,22 @@ body {
   background-color: var(--bg-app);
   color: var(--text-body);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   -webkit-font-smoothing: antialiased;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
 }
 
 .auth-wrapper {
   width: 100%;
   max-width: 440px;
-  padding: 24px 16px;
-  margin: 0 auto;
+  margin: auto;
+  box-sizing: border-box;
 }
 
 .auth-card {
@@ -158,7 +163,7 @@ body {
 .form-input {
   width: 100%;
   padding: 10px 14px;
-  font-size: 0.9rem;
+  font-size: 16px;
   font-family: inherit;
   color: var(--text-main);
   background-color: #ffffff;
@@ -166,6 +171,8 @@ body {
   border-radius: var(--radius-md);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  -webkit-appearance: none;
 }
 
 .form-input:focus {
@@ -174,7 +181,7 @@ body {
 }
 
 .form-input.has-toggle {
-  padding-right: 42px;
+  padding-right: 44px;
 }
 
 .toggle-password-btn {
@@ -184,10 +191,13 @@ body {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  touch-action: manipulation;
 }
 
 .toggle-password-btn svg {
@@ -202,8 +212,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 11px 18px;
-  font-size: 0.9rem;
+  padding: 12px 18px;
+  min-height: 48px;
+  font-size: 0.95rem;
   font-weight: 600;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
@@ -212,6 +223,9 @@ body {
   cursor: pointer;
   box-shadow: 0 1px 2px rgba(30, 64, 175, 0.2);
   transition: all 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .btn-primary:hover {
@@ -220,8 +234,8 @@ body {
 
 .spinner {
   display: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: #ffffff;
   border-radius: 50%;
@@ -253,8 +267,23 @@ body {
 }
 
 @media (max-width: 480px) {
+  body {
+    padding: max(16px, env(safe-area-inset-top, 16px)) 12px max(16px, env(safe-area-inset-bottom, 16px));
+    justify-content: flex-start;
+  }
+
+  .auth-wrapper {
+    margin: auto 0;
+    padding: 0;
+  }
+
   .auth-card {
-    padding: 28px 20px;
+    padding: 24px 18px;
     border-radius: var(--radius-lg);
+  }
+
+  .btn-primary {
+    min-height: 48px;
+    font-size: 0.95rem;
   }
 }

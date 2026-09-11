@@ -1,7 +1,7 @@
 // Progressive Web App Service Worker for School Data Portal & Admin Panel
 // Provides offline-first application shell caching, persistent asset storage, and PWA reliability
 
-const CACHE_NAME = "school-data-portal-v5";
+const CACHE_NAME = "school-data-portal-v7";
 
 // Core application shell resources precached on installation (relative paths for GitHub Pages & root domains)
 const PRECACHE_URLS = [
@@ -20,6 +20,7 @@ const PRECACHE_URLS = [
   "./css/style.css",
   "./css/dashboard.css",
   "./css/school.css",
+  "./css/admin-login.css",
   "./js/firebase.js",
   "./js/offline-store.js",
   "./js/session-manager.js",
@@ -32,7 +33,10 @@ const PRECACHE_URLS = [
   "./js/school/excel-service.js",
   "./js/school/pdf-service.js",
   "./js/admin/login.js",
-  "./js/admin/dashboard.js"
+  "./js/admin/dashboard.js",
+  "./js/admin/superadmin-ui.js",
+  "./js/admin/firestore-service.js",
+  "./js/admin/excel-parser.js"
 ];
 
 // Install Event: Precache core application shell
@@ -71,13 +75,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // 1. Strictly bypass Firebase backend APIs, Firestore realtime websockets/REST, and extensions
+  // 1. Strictly bypass Firebase backend APIs, Firestore realtime websockets/REST, CDN libraries, Google APIs, and extensions
   if (
     event.request.method !== "GET" ||
     url.hostname.includes("firestore.googleapis.com") ||
     url.hostname.includes("identitytoolkit.googleapis.com") ||
-    url.hostname.includes("firebaseio.com") ||
     url.hostname.includes("securetoken.googleapis.com") ||
+    url.hostname.includes("firebaseio.com") ||
+    url.hostname.includes("firebaseapp.com") ||
+    url.hostname.includes("firebasestorage.app") ||
+    url.hostname.includes("googleapis.com") ||
+    url.hostname.includes("gstatic.com") ||
+    url.hostname.includes("google.com") ||
+    url.hostname.includes("jsdelivr.net") ||
+    url.hostname.includes("unpkg.com") ||
     url.protocol.startsWith("chrome-extension")
   ) {
     return;
@@ -186,8 +197,11 @@ self.addEventListener("fetch", (event) => {
 
         if (fileName) {
           const keys = await cache.keys();
+          const targetIsAdmin = reqUrl.pathname.includes("admin");
           const matchedKey = keys.find((k) => {
             const keyUrl = new URL(k.url);
+            const keyIsAdmin = keyUrl.pathname.includes("admin");
+            if (targetIsAdmin !== keyIsAdmin) return false;
             return keyUrl.pathname.endsWith("/" + fileName) || keyUrl.pathname === fileName;
           });
           if (matchedKey) {
