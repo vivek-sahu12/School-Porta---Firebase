@@ -333,10 +333,25 @@ body {
 /* View Sections */
 .admin-view {
   display: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .admin-view.active {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.school-details-view {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .welcome-header {
@@ -579,7 +594,12 @@ body {
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .subnav-tab {
@@ -626,18 +646,30 @@ body {
   box-shadow: var(--shadow-xs);
   gap: 16px;
   flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .school-header-left {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  flex: 1;
 }
 
 .school-header-avatar {
   width: 48px;
   height: 48px;
   font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.school-header-info {
+  min-width: 0;
+  flex: 1;
 }
 
 .school-header-info h2 {
@@ -645,6 +677,7 @@ body {
   font-weight: 800;
   color: var(--text-main);
   line-height: 1.2;
+  word-break: break-word;
 }
 
 .school-header-meta {
@@ -655,6 +688,20 @@ body {
   color: var(--text-muted);
   margin-top: 4px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+#sd-admin-email {
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.school-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 /* Panels */
@@ -665,6 +712,10 @@ body {
   padding: 24px;
   box-shadow: var(--shadow-xs);
   margin-bottom: 20px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .panel-header {
@@ -888,13 +939,17 @@ body {
   gap: 10px;
 }
 
-.type-selector {
+.type-selector,
+.type-switcher {
   display: flex;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 3px;
   margin-bottom: 18px;
   background: #f8fafc;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .type-btn {
@@ -1294,6 +1349,10 @@ input:checked + .slider::before {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .section-chips-list {
@@ -1338,10 +1397,15 @@ input:checked + .slider::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px 14px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .column-item-left {
@@ -1579,6 +1643,10 @@ input:checked + .slider::before {
     align-items: stretch;
     padding: 16px 14px;
     gap: 14px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .school-header-left {
@@ -1586,6 +1654,7 @@ input:checked + .slider::before {
     align-items: center;
     gap: 12px;
     width: 100%;
+    min-width: 0;
   }
 
   .school-header-info {
@@ -1604,6 +1673,7 @@ input:checked + .slider::before {
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
+    min-width: 0;
   }
 
   .school-header-meta > span:not(.badge):not([id]) {
@@ -1611,8 +1681,8 @@ input:checked + .slider::before {
   }
 
   .school-header-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 8px;
     width: 100%;
     margin-top: 4px;
@@ -1623,7 +1693,7 @@ input:checked + .slider::before {
     justify-content: center;
     min-height: 38px;
     padding: 6px 10px;
-    font-size: 0.775rem;
+    font-size: 0.8rem;
   }
 
   /* Subnav Tabs — Smooth Horizontal Swipe with Hidden Scrollbars */
@@ -1637,6 +1707,10 @@ input:checked + .slider::before {
     padding: 4px 2px 8px 2px;
     margin-bottom: 16px;
     border-bottom: 1px solid var(--border);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .subnav-tabs::-webkit-scrollbar {
@@ -1666,6 +1740,10 @@ input:checked + .slider::before {
   .section-panel-card {
     padding: 16px 14px;
     border-radius: var(--radius-md);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .panel-header {
@@ -1687,6 +1765,10 @@ input:checked + .slider::before {
     align-items: stretch;
     padding: 12px 14px;
     gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .section-class-card > div:first-child {
@@ -1695,11 +1777,13 @@ input:checked + .slider::before {
     align-items: flex-start;
     gap: 8px;
     width: 100%;
+    min-width: 0;
   }
 
   .section-class-card .btn {
-    align-self: flex-end;
-    min-height: 32px;
+    width: 100%;
+    justify-content: center;
+    min-height: 34px;
   }
 
   /* School Data Column Mobile Card */
@@ -1708,6 +1792,10 @@ input:checked + .slider::before {
     align-items: stretch;
     padding: 12px 14px;
     gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .column-item-card > div:first-child {
@@ -1718,15 +1806,17 @@ input:checked + .slider::before {
   .column-item-card > div:last-child {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: stretch;
     gap: 6px;
     width: 100%;
     padding-top: 8px;
     border-top: 1px solid var(--border-light);
+    flex-wrap: wrap;
   }
 
   .column-item-card > div:last-child .btn {
     flex: 1;
+    min-width: 54px;
     justify-content: center;
     min-height: 34px;
     font-size: 0.75rem;
