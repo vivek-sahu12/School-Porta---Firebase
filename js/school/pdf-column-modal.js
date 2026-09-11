@@ -10,6 +10,7 @@ import {
   cleanupModalHistory,
   registerModalCloseHandler
 } from "./modal-history-manager.js";
+import { getSchoolDataColumns } from "../school-config.js";
 
 export const MAX_USER_COLUMNS = 7;
 
@@ -37,9 +38,10 @@ export const DATASET_COLUMN_DEFS = {
     { key: "scholarNo", label: "Scholar No", defaultOrder: 1 },
     { key: "studentName", label: "Student Name", defaultOrder: 2 },
     { key: "className", label: "Class", defaultOrder: 3 },
-    { key: "gender", label: "Gender", defaultOrder: 4 },
-    { key: "category", label: "Category", defaultOrder: 5 },
-    { key: "fatherName", label: "Father Name", defaultOrder: 6 }
+    { key: "section", label: "Section", defaultOrder: 4 },
+    { key: "gender", label: "Gender", defaultOrder: 5 },
+    { key: "category", label: "Category", defaultOrder: 6 },
+    { key: "fatherName", label: "Father Name", defaultOrder: 7 }
   ]
 };
 
@@ -51,10 +53,26 @@ function getStorageKey(datasetKey) {
 }
 
 /**
+ * Resolve effective selectable columns considering school features
+ */
+export function getEffectiveColumnDefs(datasetKey, school) {
+  if (datasetKey === DATASET_KEYS.SCHOOL_DATA) {
+    const schoolCols = getSchoolDataColumns(school);
+    return schoolCols.map((c, idx) => ({
+      key: c.columnId,
+      label: c.label,
+      defaultOrder: idx + 1
+    }));
+  }
+  let defs = DATASET_COLUMN_DEFS[datasetKey] || DATASET_COLUMN_DEFS[DATASET_KEYS.SCHOOL_DATA];
+  return defs;
+}
+
+/**
  * Load saved column configuration or return sensible default
  */
-export function loadSavedColumnConfig(datasetKey) {
-  const defs = DATASET_COLUMN_DEFS[datasetKey] || DATASET_COLUMN_DEFS[DATASET_KEYS.SCHOOL_DATA];
+export function loadSavedColumnConfig(datasetKey, school) {
+  const defs = getEffectiveColumnDefs(datasetKey, school);
   const validKeys = new Set(defs.map(d => d.key));
 
   try {
@@ -109,18 +127,20 @@ let currentModalState = null;
  *
  * @param {Object} options
  * @param {string} options.datasetKey
+ * @param {Object} [options.school]
  * @param {Function} options.onGenerate - Callback receiving final column config
  * @param {Function} [options.onToast] - Optional toast notifier
  */
-export function openPdfColumnModal({ datasetKey, onGenerate, onToast }) {
+export function openPdfColumnModal({ datasetKey, school, onGenerate, onToast }) {
   // Ensure existing modal is cleaned up
   closePdfColumnModal();
 
-  const defs = DATASET_COLUMN_DEFS[datasetKey] || DATASET_COLUMN_DEFS[DATASET_KEYS.SCHOOL_DATA];
-  const savedItems = loadSavedColumnConfig(datasetKey);
+  const defs = getEffectiveColumnDefs(datasetKey, school);
+  const savedItems = loadSavedColumnConfig(datasetKey, school);
 
   currentModalState = {
     datasetKey,
+    school,
     defs,
     selectedItems: [...savedItems], // Array of { type: 'field', key } | { type: 'blank', id }
     onGenerate,

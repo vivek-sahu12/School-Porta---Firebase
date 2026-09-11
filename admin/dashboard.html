@@ -53,13 +53,18 @@
          ==================================================================== -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <div class="brand-icon" style="background: none; border: none; padding: 0;">
-          <img src="../icon.svg" alt="School Data Portal" style="width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+        <div class="brand-group">
+          <div class="brand-icon" style="background: none; border: none; padding: 0;">
+            <img src="../icon.svg" alt="School Data Portal" style="width: 34px; height: 34px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+          </div>
+          <div class="brand-text">
+            <h1>Admin Panel</h1>
+            <span class="brand-badge">Super Admin Control</span>
+          </div>
         </div>
-        <div class="brand-text">
-          <h1>Admin Panel</h1>
-          <span class="brand-badge">Super Admin Control</span>
-        </div>
+        <button id="sidebar-close-btn" class="sidebar-close-btn" aria-label="Close sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -145,6 +150,10 @@
           <button class="btn btn-primary btn-sm desktop-only" onclick="window.openAddAccountModal()">
             <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Add Existing Account
+          </button>
+          <!-- Mobile Admin Pill / Profile Shortcut -->
+          <button class="mobile-admin-btn mobile-only" onclick="window.navigateView('settings')" title="Super Admin Settings" aria-label="Admin Profile">
+            <span class="mobile-admin-avatar">SA</span>
           </button>
         </div>
       </header>
@@ -248,7 +257,7 @@
               <h2 class="section-title">Schools Management</h2>
               <p class="section-subtitle">Centralized directory of all educational institutions</p>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div class="section-actions-group">
               <input type="text" id="schools-search-input" class="form-input" placeholder="Search schools..." style="max-width: 240px; padding: 6px 12px;">
               <button class="btn btn-primary btn-sm" onclick="window.openAddAccountModal('school')">+ Add School Account</button>
             </div>
@@ -282,7 +291,7 @@
              VIEW 3: DEDICATED SCHOOL MANAGEMENT PAGE (Unified Account Sub-Nav)
              ================================================================ -->
         <section id="view-school-details" class="admin-view">
-          <div style="margin-bottom: 16px;">
+          <div class="back-nav-bar" style="margin-bottom: 16px;">
             <button class="btn btn-secondary btn-sm" onclick="window.navigateView('dashboard')">
               &larr; Back to Dashboard
             </button>
@@ -306,7 +315,7 @@
                   </div>
                 </div>
               </div>
-              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <div class="school-header-actions">
                 <button class="btn btn-secondary btn-sm" id="sd-edit-school-btn">Edit Info</button>
                 <button class="btn btn-secondary btn-sm" id="sd-toggle-status-btn">Toggle Status</button>
                 <button class="btn btn-danger-outline btn-sm" id="sd-delete-btn">Permanently Delete</button>
@@ -320,6 +329,8 @@
               <button class="subnav-tab" data-tab="users" onclick="window.switchSchoolTab('users')">3. School Users</button>
               <button class="subnav-tab" data-tab="sessions" onclick="window.switchSchoolTab('sessions')">4. Active Sessions</button>
               <button class="subnav-tab" data-tab="student-data" onclick="window.switchSchoolTab('student-data')">5. Student Data</button>
+              <button class="subnav-tab" data-tab="sections" onclick="window.switchSchoolTab('sections')">6. Sections</button>
+              <button class="subnav-tab" data-tab="columns" onclick="window.switchSchoolTab('columns')">7. School Data Columns</button>
             </div>
 
             <!-- Tab 1: Primary School Account Pane -->
@@ -612,6 +623,74 @@
                 </div>
               </div>
             </div>
+
+            <!-- Tab 6: Section Management Pane -->
+            <div id="school-tab-sections" class="school-tab-pane">
+              <div class="section-panel-card">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                      Section Configuration
+                    </div>
+                    <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 2px;">
+                      Configure class-wise student sections for <strong id="sd-sections-school-name" style="color: var(--primary);">—</strong>.
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Master Toggle Switch -->
+                <div class="toggle-row" style="background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 20px;">
+                  <div>
+                    <div class="toggle-title" style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">Sections in School</div>
+                    <div class="toggle-desc" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                      Enable or disable class-wise section management, section filtering, and dashboard strength tiles.
+                    </div>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="sd-sections-master-toggle" onchange="window.handleToggleSchoolSections(this.checked)">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <!-- Class-Wise Section Management Container -->
+                <div id="sd-sections-class-container">
+                  <!-- Dynamically populated class-wise rows -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 7: School Data Columns Pane -->
+            <div id="school-tab-columns" class="school-tab-pane">
+              <div class="section-panel-card">
+                <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
+                  <div>
+                    <div class="panel-title" style="display: flex; align-items: center; gap: 8px; font-size: 1.05rem; font-weight: 700; color: var(--text-main);">
+                      <svg style="width: 20px; height: 20px; color: var(--primary);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                      School Data Columns
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                      Manage the fields available for student School Data for <span id="sd-columns-school-name" style="font-weight: 700; color: var(--text-main);"></span>.
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-add-school-column" onclick="window.openAddColumnModal()" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                    <svg style="width: 15px; height: 15px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Add Column
+                  </button>
+                </div>
+
+                <!-- Info Notice on Core vs Custom -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 16px; font-size: 0.775rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+                  <svg style="width: 16px; height: 16px; color: #64748b; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  <span><strong>Core fields</strong> (Class, Name, Gender, etc.) are protected system fields. <strong>Custom fields</strong> can be freely renamed, reordered, and deleted.</span>
+                </div>
+
+                <!-- Columns List Container -->
+                <div id="sd-columns-container" style="display: flex; flex-direction: column; gap: 8px;">
+                  <!-- Dynamically populated column cards -->
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -659,14 +738,14 @@
               <h2 class="section-title">Live Connected Device Sessions</h2>
               <p class="section-subtitle">Real-time session monitor across all schools and users</p>
             </div>
-            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <label for="sessions-school-filter" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Filter School:</label>
-                <select id="sessions-school-filter" class="form-input" style="padding: 6px 12px; min-width: 200px; font-weight: 600; color: var(--text-main);">
+            <div class="sessions-filter-bar">
+              <div class="sessions-filter-group">
+                <label for="sessions-school-filter" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Filter School:</label>
+                <select id="sessions-school-filter" class="form-input" style="padding: 6px 12px; min-width: 180px; font-weight: 600; color: var(--text-main);">
                   <option value="all">All Schools (All Active)</option>
                 </select>
               </div>
-              <div style="font-size: 0.85rem; font-weight: 600; color: #7c3aed; background: #f5f3ff; border: 1px solid #ddd6fe; padding: 6px 14px; border-radius: 9999px;">
+              <div class="sessions-count-chip">
                 <span id="sessions-total-count">0</span> Active Sessions Connected
               </div>
             </div>
@@ -775,14 +854,14 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td>
+                        <td data-label="Device">
                           <div style="font-weight: 700; color: var(--text-main);" id="admin-current-browser">Chrome Browser</div>
                           <div style="font-size: 0.75rem; color: var(--text-muted);">Current Active Device</div>
                         </td>
-                        <td><span style="font-weight: 600;" id="admin-current-os">Windows</span></td>
-                        <td><span style="font-size: 0.85rem;" id="admin-current-login-time">Today, Just now</span></td>
-                        <td><span style="font-size: 0.85rem; color: #16a34a; font-weight: 600;">Active Now</span></td>
-                        <td><span class="badge badge-active">Current Session</span></td>
+                        <td data-label="OS"><span style="font-weight: 600;" id="admin-current-os">Windows</span></td>
+                        <td data-label="Login Time"><span style="font-size: 0.85rem;" id="admin-current-login-time">Today, Just now</span></td>
+                        <td data-label="Last Active"><span style="font-size: 0.85rem; color: #16a34a; font-weight: 600;">Active Now</span></td>
+                        <td data-label="Status"><span class="badge badge-active">Current Session</span></td>
                         <td style="text-align: right;">
                           <button class="btn btn-secondary btn-sm" onclick="window.signoutOtherSessions()">
                             Sign out other sessions
@@ -1353,6 +1432,37 @@
   </div>
 
 
+  <!-- Modal: Add Section to Class -->
+  <div id="modal-add-section" class="modal-overlay">
+    <div class="modal-card" style="max-width: 380px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="add-section-modal-title">Add Section</h3>
+          <div style="font-size: 0.775rem; color: var(--text-muted);" id="add-section-modal-sub">Configure new section for class</div>
+        </div>
+        <button class="modal-close" onclick="window.closeModal('modal-add-section')">&times;</button>
+      </div>
+      <form id="form-add-section" onsubmit="window.handleSaveSection(event)">
+        <input type="hidden" id="add-section-class-target" value="">
+        <div class="modal-body">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="add-section-name-input">Section Name *</label>
+            <input type="text" id="add-section-name-input" class="form-input" placeholder="e.g. A, B, C..." maxlength="20" required autofocus autocomplete="off">
+            <div style="font-size: 0.725rem; color: var(--text-muted); margin-top: 4px;">
+              Enter a single letter or short identifier (e.g. A, B, C).
+            </div>
+            <div id="add-section-error-msg" style="display: none; color: #dc2626; font-size: 0.75rem; font-weight: 600; margin-top: 6px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-add-section')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-section">Save Section</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
   <!-- Modal 5: Two-Step Confirmation for School Deactivation -->
   <div id="modal-confirm-deactivate-school" class="modal-overlay">
     <div class="modal-card">
@@ -1394,6 +1504,111 @@
       <div class="modal-footer" id="del-user-modal-footer">
         <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-delete-user')">Cancel</button>
         <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Modal 7: Add School Data Column -->
+  <div id="modal-add-column" class="modal-overlay">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Add School Data Column</h3>
+          <p class="modal-subtitle" id="add-col-modal-sub">Define a new student field for this school</p>
+        </div>
+        <button class="modal-close" onclick="window.closeModal('modal-add-column')">&times;</button>
+      </div>
+      <form id="form-add-column" onsubmit="window.handleSaveNewColumn(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="add-col-name-input">Column Name *</label>
+            <input type="text" id="add-col-name-input" class="form-input" placeholder="e.g. Mother Name, Blood Group" maxlength="50" required autofocus autocomplete="off">
+            <div style="font-size: 0.725rem; color: var(--text-muted); margin-top: 4px;">
+              Enter a unique human-readable label for this field.
+            </div>
+            <div id="add-col-error-msg" style="display: none; color: #dc2626; font-size: 0.75rem; font-weight: 600; margin-top: 6px;"></div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="add-col-type-select">Column Type *</label>
+            <select id="add-col-type-select" class="form-select">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="phone">Phone</option>
+              <option value="boolean">Yes/No (Boolean)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-add-column')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-new-column">Add Column</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal 8: Edit / Rename School Data Column -->
+  <div id="modal-edit-column" class="modal-overlay">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Edit Column</h3>
+          <p class="modal-subtitle">Update field label and data type</p>
+        </div>
+        <button class="modal-close" onclick="window.closeModal('modal-edit-column')">&times;</button>
+      </div>
+      <form id="form-edit-column" onsubmit="window.handleSaveEditColumn(event)">
+        <input type="hidden" id="edit-col-id-input" value="">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="edit-col-name-input">Column Name *</label>
+            <input type="text" id="edit-col-name-input" class="form-input" placeholder="Column label" maxlength="50" required autofocus autocomplete="off">
+            <div id="edit-col-error-msg" style="display: none; color: #dc2626; font-size: 0.75rem; font-weight: 600; margin-top: 6px;"></div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="edit-col-type-select">Column Type</label>
+            <select id="edit-col-type-select" class="form-select">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="phone">Phone</option>
+              <option value="boolean">Yes/No (Boolean)</option>
+            </select>
+            <div id="edit-col-type-notice" style="display: none; font-size: 0.725rem; color: #b45309; background: #fffbeb; padding: 6px 8px; border-radius: 4px; margin-top: 6px;">
+              Note: Changing column type does not alter existing stored values.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-edit-column')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-edit-column">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal 9: Confirm Delete School Data Column -->
+  <div id="modal-confirm-delete-column" class="modal-overlay">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header" style="background: #fef2f2; border-bottom-color: #fecaca;">
+        <h3 class="modal-title" style="color: #dc2626;">Delete Column?</h3>
+        <button class="modal-close" onclick="window.closeModal('modal-confirm-delete-column')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="del-col-id-input" value="">
+        <p style="font-size: 0.9rem; color: var(--text-main); font-weight: 600; margin-bottom: 8px;">
+          Are you sure you want to delete <span id="del-col-name" style="font-weight: 800; color: #dc2626;"></span>?
+        </p>
+        <p id="del-col-warning-text" style="font-size: 0.825rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px;">
+          This will remove the column configuration for this school. Existing core fields and other columns will remain unaffected.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="window.closeModal('modal-confirm-delete-column')">Cancel</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-delete-col-action" onclick="window.handleConfirmDeleteColumn()">Delete</button>
       </div>
     </div>
   </div>

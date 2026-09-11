@@ -114,6 +114,21 @@ export function formatDateVerbose(dateInput) {
 }
 
 /**
+ * Formats a Date object or string into "YYYY-MM-DD" ISO format for date inputs.
+ * @param {Date|string} [dateInput]
+ * @returns {string}
+ */
+export function formatDateISO(dateInput = new Date()) {
+  if (!dateInput) return "";
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Parses a "YYYY-MM-DD" or "DD/MM/YYYY" string safely into a local midnight Date.
  * @param {string} dateStr 
  * @returns {Date|null}

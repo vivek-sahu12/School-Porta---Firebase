@@ -964,3 +964,86 @@ export async function getSchoolDatasetSummaries(schoolId) {
   return summaries;
 }
 
+/**
+ * Fetch raw students array for a dataset (Admin only, e.g. for section deletion safety check)
+ */
+export async function getSchoolDatasetStudents(schoolId, datasetKey = "school_data") {
+  const cleanSchoolId = (schoolId || "").trim().toUpperCase();
+  if (!cleanSchoolId) return [];
+  try {
+    const dSnap = await getDoc(doc(db, "student_datasets", `${cleanSchoolId}_${datasetKey}`));
+    if (dSnap.exists()) {
+      return dSnap.data().students || [];
+    }
+  } catch (e) {
+    console.warn(`Error fetching students for ${datasetKey}:`, e);
+  }
+  return [];
+}
+
+/**
+ * Save School Data Columns configuration for a school
+ */
+export async function saveSchoolColumns(schoolId, columns) {
+  const cleanSchoolId = (schoolId || "").trim().toUpperCase();
+  if (!cleanSchoolId) throw new Error("School ID is required.");
+
+  await updateSchool(cleanSchoolId, {
+    schoolDataColumns: columns
+  });
+
+  await logAdminAction({
+    action: "School Data Columns Updated",
+    target: `School: ${cleanSchoolId}`,
+    details: `${columns.length} columns configured`
+  });
+}
+
+/**
+ * Remove a custom column's stored values from School Data student records
+ */
+export async function deleteSchoolColumnData(schoolId, columnId) {
+  const cleanSchoolId = (schoolId || "").trim().toUpperCase();
+  if (!cleanSchoolId || !columnId) return;
+
+  try {
+    const docId = `${cleanSchoolId}_school_data`;
+    const datasetDocRef = doc(db, "student_datasets", docId);
+    const snap = await getDoc(datasetDocRef);
+
+    if (snap.exists()) {
+      const data = snap.data();
+      const students = Array.isArray(data.students) ? data.students : [];
+      let modified = false;
+
+      const cleanedStudents = students.map(st => {
+        let stModified = false;
+        const updated = { ...st };
+
+        if (updated.customFields && Object.prototype.hasOwnProperty.call(updated.customFields, columnId)) {
+          updated.customFields = { ...updated.customFields };
+          delete updated.customFields[columnId];
+          stModified = true;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(updated, columnId) && !["scholarNo", "studentName", "className", "gender", "category", "section", "id", "schoolId", "dataset"].includes(columnId)) {
+          delete updated[columnId];
+          stModified = true;
+        }
+
+        if (stModified) modified = true;
+        return updated;
+      });
+
+      if (modified) {
+        await updateDoc(datasetDocRef, {
+          students: cleanedStudents,
+          updatedAt: serverTimestamp()
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`Could not clean up column data for ${columnId}:`, err);
+  }
+}
+

@@ -367,16 +367,23 @@ export function calculateDatasetAnalytics(datasetKey = DATASET_KEYS.SCHOOL_DATA)
 
   // 1. Class Distribution with Natural School Order
   const classMap = {};
+  const classSectionCounts = {};
   students.forEach((st) => {
     const c = normalizeClassLabel(st.className);
     classMap[c] = (classMap[c] || 0) + 1;
+    const sec = (st.section || "").trim().toUpperCase();
+    if (sec) {
+      if (!classSectionCounts[c]) classSectionCounts[c] = {};
+      classSectionCounts[c][sec] = (classSectionCounts[c][sec] || 0) + 1;
+    }
   });
 
   const classList = Object.keys(classMap).map(cls => ({
     className: cls,
     rank: getNaturalClassOrder(cls),
     count: classMap[cls],
-    percent: total > 0 ? Math.round((classMap[cls] / total) * 100) : 0
+    percent: total > 0 ? Math.round((classMap[cls] / total) * 100) : 0,
+    sectionCounts: classSectionCounts[cls] || {}
   })).sort((a, b) => {
     if (a.rank !== b.rank) return a.rank - b.rank;
     return a.className.localeCompare(b.className, undefined, { numeric: true });
@@ -440,10 +447,11 @@ export function calculateDatasetAnalytics(datasetKey = DATASET_KEYS.SCHOOL_DATA)
  * Filter students in memory by class, gender, category, and search query.
  * All results are GUARANTEED to be sorted alphabetically by student name (A–Z, case-insensitive, trimmed).
  */
-export function filterStudents(datasetKey, { search = "", className = "", gender = "", category = "" } = {}) {
+export function filterStudents(datasetKey, { search = "", className = "", section = "", gender = "", category = "" } = {}) {
   const students = memoryStore[datasetKey] || [];
   const q = search.trim().toLowerCase();
   const targetClass = className ? normalizeClassLabel(className).toLowerCase() : "";
+  const targetSection = (section || "").trim().toUpperCase();
   const targetGender = gender.trim().toLowerCase();
   const targetCategory = category.trim().toUpperCase();
 
@@ -451,6 +459,14 @@ export function filterStudents(datasetKey, { search = "", className = "", gender
     // 1. Class filter (compares normalized class labels)
     if (targetClass && normalizeClassLabel(st.className).toLowerCase() !== targetClass) {
       return false;
+    }
+
+    // 1b. Section filter (compares normalized section names)
+    if (targetSection) {
+      const stSec = (st.section || "").trim().toUpperCase();
+      if (stSec !== targetSection) {
+        return false;
+      }
     }
 
     // 2. Gender filter

@@ -6,7 +6,11 @@
  */
 
 import * as XLSX from "xlsx";
-import { formatClassDisplay } from "../school-config.js";
+import {
+  formatClassDisplay,
+  getSchoolDataColumns,
+  getStudentFieldValue
+} from "../school-config.js";
 import { DATASET_KEYS } from "./student-service.js";
 
 /**
@@ -75,7 +79,24 @@ export async function generateStudentListExcel({ school = {}, datasetKey, studen
     }
 
     const schoolId = school.schoolId || "SCH";
-    const schemaColumns = EXCEL_DATASET_SCHEMAS[datasetKey] || EXCEL_DATASET_SCHEMAS[DATASET_KEYS.SCHOOL_DATA];
+    let schemaColumns = [];
+
+    if (datasetKey === DATASET_KEYS.SCHOOL_DATA) {
+      const schoolCols = getSchoolDataColumns(school);
+      schemaColumns = schoolCols.map(col => ({
+        key: col.columnId,
+        label: col.label,
+        wch: col.type === "text" ? 24 : 14,
+        getValue: (st) => {
+          if (col.columnId === "className") {
+            return formatClassDisplay(st.className);
+          }
+          return getStudentFieldValue(st, col);
+        }
+      }));
+    } else {
+      schemaColumns = [...(EXCEL_DATASET_SCHEMAS[datasetKey] || EXCEL_DATASET_SCHEMAS[DATASET_KEYS.SCHOOL_DATA])];
+    }
 
     // 1. Build Header Row: S.No first, followed by all canonical dataset columns
     const headerRow = ["S.No.", ...schemaColumns.map(col => col.label)];

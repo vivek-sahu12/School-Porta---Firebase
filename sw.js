@@ -1,93 +1,210 @@
 // Progressive Web App Service Worker for School Data Portal & Admin Panel
-// Provides network caching, offline support, and fulfills PWA installability requirements
+// Provides offline-first application shell caching, persistent asset storage, and PWA reliability
 
-const CACHE_NAME = "school-data-portal-v3";
+const CACHE_NAME = "school-data-portal-v5";
+
+// Core application shell resources precached on installation (relative paths for GitHub Pages & root domains)
 const PRECACHE_URLS = [
+  "./",
+  "./index.html",
+  "./dashboard.html",
+  "./admin/index.html",
+  "./admin/dashboard.html",
+  "./manifest.json",
+  "./admin/manifest.json",
   "./icon.svg",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-192.png",
-  "./icon-maskable-512.png"
+  "./icon-maskable-512.png",
+  "./css/style.css",
+  "./css/dashboard.css",
+  "./css/school.css",
+  "./js/firebase.js",
+  "./js/offline-store.js",
+  "./js/session-manager.js",
+  "./js/school-config.js",
+  "./js/user/login.js",
+  "./js/school/dashboard.js",
+  "./js/school/school-ui.js",
+  "./js/school/student-service.js",
+  "./js/school/age-calculator.js",
+  "./js/school/excel-service.js",
+  "./js/school/pdf-service.js",
+  "./js/admin/login.js",
+  "./js/admin/dashboard.js"
 ];
 
-// Install Event
+// Install Event: Precache core application shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_URLS).catch((err) => {
-        console.warn("Service worker precache partial failure:", err);
-      });
+      return Promise.allSettled(
+        PRECACHE_URLS.map((url) => {
+          const resolvedUrl = new URL(url, self.location.href).href;
+          return cache.add(resolvedUrl).catch((err) => {
+            console.warn(`[SW] Precache item note for ${url}:`, err.message);
+          });
+        })
+      );
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate Event
+// Activate Event: Clean up stale/older caches and claim clients immediately
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
           .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
+          .map((name) => {
+            console.log(`[SW] Purging outdated cache: ${name}`);
+            return caches.delete(name);
+          })
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch Event
+// Fetch Event: Offline-first caching strategy
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Do NOT intercept Firebase, Google API, CDN, or non-GET requests
+  // 1. Strictly bypass Firebase backend APIs, Firestore realtime websockets/REST, and extensions
   if (
     event.request.method !== "GET" ||
     url.hostname.includes("firestore.googleapis.com") ||
     url.hostname.includes("identitytoolkit.googleapis.com") ||
     url.hostname.includes("firebaseio.com") ||
-    url.hostname.includes("gstatic.com") ||
-    url.hostname.includes("jsdelivr.net") ||
-    url.hostname.includes("googleapis.com") ||
+    url.hostname.includes("securetoken.googleapis.com") ||
     url.protocol.startsWith("chrome-extension")
   ) {
     return;
   }
 
-  // Network First with Cache Fallback for navigation requests
+  // 2. Navigation requests (HTML Pages: index.html, dashboard.html, etc.)
+  // Network-first with automatic cache fallback and dynamic cache updating
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(event.request);
-      })
-    );
-    return;
-  }
-
-  // Cache First for static images and assets
-  if (
-    url.pathname.endsWith(".svg") ||
-    url.pathname.endsWith(".png") ||
-    url.pathname.endsWith(".jpg") ||
-    url.pathname.endsWith(".woff2")
-  ) {
-    event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((networkResponse) => {
+      fetch(event.request)
+        .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
           }
           return networkResponse;
-        });
-      })
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+
+          // A. Try exact match first
+          const exactMatch = await cache.match(event.request, { ignoreSearch: true });
+          if (exactMatch) return exactMatch;
+
+          const reqUrl = new URL(event.request.url);
+          const pathname = reqUrl.pathname;
+
+          // B. Target-specific matches resolved against Service Worker location
+          if (pathname.includes("admin/dashboard") || pathname.endsWith("/admin/dashboard")) {
+            const adminDash = await cache.match(new URL("./admin/dashboard.html", self.location.href).href);
+            if (adminDash) return adminDash;
+          }
+          if (pathname.includes("dashboard") || pathname.endsWith("/dashboard")) {
+            const dash = await cache.match(new URL("./dashboard.html", self.location.href).href);
+            if (dash) return dash;
+          }
+          if (pathname.includes("admin")) {
+            const adminLogin = await cache.match(new URL("./admin/index.html", self.location.href).href);
+            if (adminLogin) return adminLogin;
+          }
+
+          // C. General index / root fallback
+          const indexMatch = (await cache.match(new URL("./index.html", self.location.href).href)) ||
+                             (await cache.match(new URL("./", self.location.href).href));
+          if (indexMatch) return indexMatch;
+
+          // D. Fallback search across all cached keys
+          const keys = await cache.keys();
+          const targetIsAdmin = pathname.includes("admin");
+          const fallbackKey = keys.find((k) => {
+            const u = k.url;
+            return targetIsAdmin ? u.includes("admin/index.html") : (u.includes("dashboard.html") || u.includes("index.html"));
+          });
+          if (fallbackKey) {
+            return await cache.match(fallbackKey);
+          }
+
+          return new Response("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Offline</title></head><body><p>App is offline. Please reconnect.</p></body></html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html" }
+          });
+        })
     );
     return;
   }
 
-  // Default: Network with fallback to cache
+  // 3. Static Assets (JS bundles, CSS, images, WebP, fonts, JSON)
+  // Cache-First with network fallback & background cache update
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+
+      // A. Check cache first
+      let cachedResponse = await cache.match(event.request);
+      if (!cachedResponse) {
+        cachedResponse = await cache.match(event.request, { ignoreSearch: true });
+      }
+
+      if (cachedResponse) {
+        // When online, revalidate in background to keep cache up to date
+        if (navigator.onLine) {
+          fetch(event.request)
+            .then((freshResponse) => {
+              if (freshResponse && (freshResponse.status === 200 || freshResponse.type === "opaque")) {
+                cache.put(event.request, freshResponse);
+              }
+            })
+            .catch(() => {});
+        }
+        return cachedResponse;
+      }
+
+      // B. If not in cache, fetch from network and store in cache
+      try {
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && (networkResponse.status === 200 || networkResponse.type === "opaque")) {
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (networkErr) {
+        // C. Network failed (offline / connection error): attempt fuzzy matching by file basename
+        const reqUrl = new URL(event.request.url);
+        const fileName = reqUrl.pathname.split("/").pop();
+
+        if (fileName) {
+          const keys = await cache.keys();
+          const matchedKey = keys.find((k) => {
+            const keyUrl = new URL(k.url);
+            return keyUrl.pathname.endsWith("/" + fileName) || keyUrl.pathname === fileName;
+          });
+          if (matchedKey) {
+            const fuzzyMatch = await cache.match(matchedKey);
+            if (fuzzyMatch) return fuzzyMatch;
+          }
+        }
+
+        // D. Fallback for image requests when offline
+        if (event.request.destination === "image" || reqUrl.pathname.match(/\.(png|jpg|jpeg|svg|webp|ico)$/i)) {
+          const fallbackIcon = await cache.match(new URL("./icon.svg", self.location.href).href);
+          if (fallbackIcon) return fallbackIcon;
+        }
+
+        // E. Return safe response rather than throwing unhandled fetch rejection
+        return new Response("", { status: 408, statusText: "Offline" });
+      }
+    })()
   );
 });

@@ -37,7 +37,11 @@ import {
   normalizeClassLabel,
   formatClassDisplay,
   escapeHtml,
-  highlightSearchMatches
+  highlightSearchMatches,
+  getSectionsForClass,
+  normalizeSectionName,
+  getSchoolDataColumns,
+  getStudentFieldValue
 } from "../school-config.js";
 
 import {
@@ -62,6 +66,7 @@ import {
   evaluateClassEligibility,
   formatDateDMY,
   formatDateVerbose,
+  formatDateISO,
   parseDateSafe
 } from "./age-calculator.js";
 import { createDatePicker } from "./date-picker-sheet.js";
@@ -79,7 +84,7 @@ let unsubSchoolSessions = null;
 
 // Student Dashboard State & Hierarchical History Stack
 let activeDataset = DATASET_KEYS.SCHOOL_DATA;
-let activeStudentListFilters = { search: "", className: "", gender: "", category: "" };
+let activeStudentListFilters = { search: "", className: "", section: "", gender: "", category: "" };
 let activeDetailStudent = null;
 
 const VIEW_TITLES = {
@@ -96,7 +101,7 @@ const VIEW_TITLES = {
 let currentPortalState = {
   view: "dashboard",
   dataset: DATASET_KEYS.SCHOOL_DATA,
-  filters: { search: "", className: "", gender: "", category: "" },
+  filters: { search: "", className: "", section: "", gender: "", category: "" },
   studentId: null,
   title: "Dashboard",
   scrollY: 0
@@ -169,6 +174,7 @@ export async function initSchoolPortalUI(user, userAccountData, initialSchoolDat
   renderSchoolUsersTable();
   renderSchoolSessionsTable();
   setupMobileDrawer();
+  initAgeCalculator();
 
   // Initialize Student Datasets & Analytics Dashboard
   await initStudentDashboard();
@@ -383,7 +389,7 @@ export function navigateSchoolPortal(targetState, { replace = false, fromHistory
     : (targetState.dataset || activeDataset);
   const targetFilters = targetState.filters
     ? { ...targetState.filters }
-    : (targetView === "student-list" ? { ...activeStudentListFilters } : { search: "", className: "", gender: "", category: "" });
+    : (targetView === "student-list" ? { ...activeStudentListFilters } : { search: "", className: "", section: "", gender: "", category: "" });
   const targetStudentId = targetState.studentId || null;
   const targetTitle = targetState.title || VIEW_TITLES[targetView] || "School Portal";
   const targetScrollY = targetState.scrollY || 0;
@@ -422,6 +428,46 @@ export function navigateSchoolPortal(targetState, { replace = false, fromHistory
   activeDataset = targetDataset;
 
   applySchoolPortalState(fullState);
+}
+
+/**
+ * Helper to synchronize Section filter dropdown options and container visibility
+ */
+function syncSectionFilterUI(currentSectionVal = "") {
+  const filterSection = document.getElementById("filter-section-select");
+  const filterRow = document.getElementById("student-filters-row");
+  if (!filterSection || !filterRow) return;
+
+  const sectionsEnabled = Boolean(currentSchoolEntity?.sectionsEnabled) && activeDataset === DATASET_KEYS.SCHOOL_DATA;
+
+  if (!sectionsEnabled) {
+    filterSection.style.display = "none";
+    filterRow.classList.remove("has-sections");
+    activeStudentListFilters.section = "";
+    return;
+  }
+
+  filterRow.classList.add("has-sections");
+  filterSection.style.display = "";
+
+  const selectedClass = activeStudentListFilters.className || "";
+  const configuredSections = selectedClass ? getSectionsForClass(currentSchoolEntity, selectedClass) : [];
+
+  let optionsHtml = `<option value="">All Sections</option>`;
+  if (configuredSections.length > 0) {
+    optionsHtml += configuredSections.map(sec => `
+      <option value="${escapeHtml(sec)}" ${sec === currentSectionVal ? "selected" : ""}>Sec ${escapeHtml(sec)}</option>
+    `).join("");
+  }
+  filterSection.innerHTML = optionsHtml;
+
+  if (currentSectionVal && configuredSections.length > 0 && !configuredSections.includes(currentSectionVal)) {
+    filterSection.value = "";
+    activeStudentListFilters.section = "";
+  } else {
+    filterSection.value = currentSectionVal || "";
+    activeStudentListFilters.section = filterSection.value;
+  }
 }
 
 /**
@@ -502,6 +548,9 @@ function applySchoolPortalState(state) {
       classSelect.value = filters.className || "";
     }
 
+    // Sync section dropdown & filter row layout
+    syncSectionFilterUI(filters.section || "");
+
     // Sync gender & category dropdowns
     const genderSelect = document.getElementById("filter-gender-select");
     if (genderSelect) genderSelect.value = filters.gender || "";
@@ -563,7 +612,7 @@ function setupSchoolLiveListeners() {
   // 2. Subscribe to Users belonging to this school
   const usersCol = collection(db, "users");
   const qUsers = query(usersCol, where("schoolId", "==", currentSchoolId));
-  unsubSchoolUsers = onSnapshot(qUsers, (snap) => {
+  unsubSchoolUsers = onSnapshot(qUsers, async (snap) => {
     liveSchoolUsers = snap.docs.map((d) => ({
       id: d.id,
       firebaseUid: d.data().firebaseUid || d.id,
@@ -580,14 +629,10 @@ function setupSchoolLiveListeners() {
       if (me) {
         if (me.status === "Inactive" || me.status === "Deleted") {
           console.warn("User account marked inactive or deleted. Revoking access.");
-          performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
+          await performForcedLogout("Your account has been deactivated or deleted by the administrator.", "./index.html");
           return;
         }
         updateUserAccountData(me);
-      } else if (currentSchoolAccount?.type !== "school" && liveSchoolUsers.length > 0) {
-        console.warn("Current user no longer present in school user list. Revoking access.");
-        performForcedLogout("Your account has been deleted by an administrator.", "./index.html");
-        return;
       }
     }
   }, (err) => console.warn("Users live listener note:", err));
@@ -1444,6 +1489,7 @@ function setupStudentDashboardInteractions() {
   const listSearch = document.getElementById("student-list-search-input");
   const listClear = document.getElementById("student-list-search-clear");
   const filterClass = document.getElementById("filter-class-select");
+  const filterSection = document.getElementById("filter-section-select");
   const filterGender = document.getElementById("filter-gender-select");
   const filterCategory = document.getElementById("filter-category-select");
 
@@ -1457,7 +1503,10 @@ function setupStudentDashboardInteractions() {
       if (activeStudentListFilters.search) {
         listTitleEl.textContent = `Search: "${activeStudentListFilters.search}" (${label})`;
       } else if (activeStudentListFilters.className) {
-        listTitleEl.textContent = `${formatClassDisplay(activeStudentListFilters.className)} (${label})`;
+        const secPart = activeStudentListFilters.section ? ` - Sec ${activeStudentListFilters.section}` : "";
+        listTitleEl.textContent = `${formatClassDisplay(activeStudentListFilters.className)}${secPart} (${label})`;
+      } else if (activeStudentListFilters.section) {
+        listTitleEl.textContent = `Section ${activeStudentListFilters.section} (${label})`;
       } else if (activeStudentListFilters.gender) {
         listTitleEl.textContent = `${activeStudentListFilters.gender}s (${label})`;
       } else if (activeStudentListFilters.category) {
@@ -1495,6 +1544,14 @@ function setupStudentDashboardInteractions() {
   if (filterClass) {
     filterClass.addEventListener("change", (e) => {
       activeStudentListFilters.className = e.target.value;
+      syncSectionFilterUI(activeStudentListFilters.section);
+      syncListFilterState();
+    });
+  }
+
+  if (filterSection) {
+    filterSection.addEventListener("change", (e) => {
+      activeStudentListFilters.section = e.target.value;
       syncListFilterState();
     });
   }
@@ -1545,6 +1602,7 @@ function setupPdfExport() {
     // Open the Column Selection Popup (Centered Modal)
     openPdfColumnModal({
       datasetKey: activeDataset,
+      school: currentSchoolEntity,
       onToast: showSchoolToast,
       onGenerate: async (columnConfig) => {
         const result = await generateStudentListPdf({
@@ -1772,25 +1830,67 @@ function renderDatasetDashboard() {
   const classGrid = document.getElementById("class-strength-grid");
   if (classGrid) {
     if (analytics.classList.length === 0) {
-      classGrid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 20px;">No class records available for ${analytics.datasetLabel}.</div>`;
+      const emptyNote = !navigator.onLine 
+        ? `Offline • No cached records available for ${analytics.datasetLabel}.` 
+        : `No class records available for ${analytics.datasetLabel}.`;
+      classGrid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 20px;">${emptyNote}</div>`;
     } else {
-      classGrid.innerHTML = analytics.classList.map(c => `
-        <div class="class-strength-card" data-class="${c.className}" role="button" tabindex="0">
-          <div class="class-card-header">
-            <span class="class-card-name">${formatClassDisplay(c.className)}</span>
-            <span class="class-card-count">${c.count}</span>
-          </div>
-          <div class="class-card-bar-bg">
-            <div class="class-card-bar-fill" style="width: ${c.percent}%;"></div>
-          </div>
-        </div>
-      `).join("");
+      const isSectionsOn = Boolean(currentSchoolEntity?.sectionsEnabled) && activeDataset === DATASET_KEYS.SCHOOL_DATA;
 
-      // Add click listeners on class cards
+      classGrid.innerHTML = analytics.classList.map(c => {
+        if (isSectionsOn) {
+          const sections = getSectionsForClass(currentSchoolEntity, c.className);
+          const sectionTilesHtml = sections.length > 0 ? sections.map(sec => {
+            const secCount = (c.sectionCounts && c.sectionCounts[sec.toUpperCase()]) || 0;
+            return `<span class="section-strength-tile" data-class="${escapeHtml(c.className)}" data-section="${escapeHtml(sec)}" role="button" tabindex="0" title="Class ${escapeHtml(formatClassDisplay(c.className))} Sec ${escapeHtml(sec)}: ${secCount} students"><span class="section-tile-name">${escapeHtml(sec)}</span><span class="section-tile-count">${secCount}</span></span>`;
+          }).join("") : "";
+
+          return `
+            <div class="class-strength-card has-sections" data-class="${c.className}" role="button" tabindex="0">
+              <div class="class-card-header">
+                <span class="class-card-name">${formatClassDisplay(c.className)}</span>
+                <span class="class-card-count">${c.count}</span>
+              </div>
+              <div class="class-card-sections-area" data-count="${sections.length}">
+                ${sectionTilesHtml}
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="class-strength-card" data-class="${c.className}" role="button" tabindex="0">
+            <div class="class-card-header">
+              <span class="class-card-name">${formatClassDisplay(c.className)}</span>
+              <span class="class-card-count">${c.count}</span>
+            </div>
+            <div class="class-card-bar-bg">
+              <div class="class-card-bar-fill" style="width: ${c.percent}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      // Add click listeners on class cards & section tiles
       classGrid.querySelectorAll(".class-strength-card").forEach(card => {
+        const className = card.getAttribute("data-class");
+
+        // Section tiles click (subordinate filter)
+        card.querySelectorAll(".section-strength-tile").forEach(tile => {
+          tile.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const sec = tile.getAttribute("data-section");
+            openStudentListView({
+              className,
+              section: sec,
+              title: `${formatClassDisplay(className)} - Sec ${sec} Students (${analytics.datasetLabel})`
+            });
+          });
+        });
+
+        // Whole card click (all students in this class)
         card.addEventListener("click", () => {
-          const className = card.getAttribute("data-class");
-          openStudentListView({ className, title: `${formatClassDisplay(className)} Students (${analytics.datasetLabel})` });
+          openStudentListView({ className, section: "", title: `${formatClassDisplay(className)} Students (${analytics.datasetLabel})` });
         });
       });
     }
@@ -1837,16 +1937,17 @@ function renderDatasetDashboard() {
 /**
  * Open Dedicated Student List View
  */
-function openStudentListView({ search = "", className = "", gender = "", category = "", title = "" } = {}) {
+function openStudentListView({ search = "", className = "", section = "", gender = "", category = "", title = "" } = {}) {
   const datasetLabel = DATASET_LABELS[activeDataset] || "School Data";
+  const secPart = (className && section) ? ` - Sec ${section}` : (section ? ` Sec ${section}` : "");
   const finalTitle = title || (search
     ? `Search: "${search}" (${datasetLabel})`
-    : (className ? `Class ${className} (${datasetLabel})` : (gender ? `${gender}s (${datasetLabel})` : (category ? `${category} Category (${datasetLabel})` : `All Students (${datasetLabel})`))));
+    : (className ? `${formatClassDisplay(className)}${secPart} (${datasetLabel})` : (gender ? `${gender}s (${datasetLabel})` : (category ? `${category} Category (${datasetLabel})` : `All Students (${datasetLabel})`))));
 
   navigateSchoolPortal({
     view: "student-list",
     dataset: activeDataset,
-    filters: { search, className, gender, category },
+    filters: { search, className, section, gender, category },
     title: finalTitle,
     scrollY: 0
   });
@@ -1965,7 +2066,7 @@ function renderStudentListCards() {
         <div class="student-card-meta-group">
           <div class="student-cell student-cell-class">
             <span class="meta-label-mobile">Class</span>
-            <span class="meta-pill class-pill">${displayClass || '—'}</span>
+            <span class="meta-pill class-pill">${(displayClass || '—') + ((activeDataset === DATASET_KEYS.SCHOOL_DATA && currentSchoolEntity?.sectionsEnabled && st.section) ? ` • Sec ${escapeHtml(st.section)}` : '')}</span>
           </div>
           <div class="student-cell student-cell-gender">
             <span class="meta-label-mobile">Gender</span>
@@ -2114,9 +2215,12 @@ function renderStudentDetailContent(studentId) {
     }
   } else {
     // Master School Data: Full comprehensive student profile
+    const hasSection = Boolean(currentSchoolEntity?.sectionsEnabled) && student.section;
     if (classSectionEl) {
       classSectionEl.style.display = "";
-      classSectionEl.textContent = `${normClass || 'Class'} • Sec ${student.section || 'A'}`;
+      classSectionEl.textContent = hasSection
+        ? `${normClass || 'Class'} • Sec ${student.section}`
+        : `${normClass || formatClassDisplay(student.className) || 'Class'}`;
     }
     if (genderEl) {
       genderEl.style.display = "";
@@ -2132,51 +2236,51 @@ function renderStudentDetailContent(studentId) {
     }
 
     if (sectionsContainer) {
+      const cols = getSchoolDataColumns(currentSchoolEntity);
+      const coreCols = cols.filter(c => c.isCore);
+      const customCols = cols.filter(c => !c.isCore);
+
+      const renderFieldItem = (col) => {
+        let val = getStudentFieldValue(student, col);
+        if (col.columnId === "className") {
+          val = formatClassDisplay(student.className);
+          if (hasSection) val += ` (Sec ${student.section})`;
+        }
+        if (val === null || val === undefined || String(val).trim() === "") {
+          val = "—";
+        }
+        return `
+          <div class="profile-field-item">
+            <span class="field-label">${escapeHtml(col.label)}</span>
+            <span class="field-value">${escapeHtml(String(val))}</span>
+          </div>
+        `;
+      };
+
       sectionsContainer.innerHTML = `
-        <!-- Section 1: Basic Details -->
+        <!-- Section 1: Basic Information -->
         <div class="profile-section-card">
           <div class="profile-section-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             <span>Basic Information</span>
           </div>
           <div class="profile-field-list">
-            <div class="profile-field-item"><span class="field-label">Student Name</span><span class="field-value">${student.studentName || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Date of Birth</span><span class="field-value">${student.dob || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Gender</span><span class="field-value">${student.gender || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Class & Section</span><span class="field-value">${formatClassDisplay(student.className)} (Sec ${student.section || 'A'})</span></div>
-            <div class="profile-field-item"><span class="field-label">Roll Number</span><span class="field-value">${student.rollNo || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Scholar / Reg. No</span><span class="field-value">${student.scholarNo || student.id || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Admission Date</span><span class="field-value">${student.admissionDate || '—'}</span></div>
+            ${coreCols.map(renderFieldItem).join("")}
           </div>
         </div>
 
-        <!-- Section 2: Parent Information -->
-        <div class="profile-section-card">
-          <div class="profile-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-            <span>Parent & Guardian Information</span>
+        ${customCols.length > 0 ? `
+          <!-- Section 2: Student Details & Additional Information -->
+          <div class="profile-section-card">
+            <div class="profile-section-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              <span>Student Details</span>
+            </div>
+            <div class="profile-field-list">
+              ${customCols.map(renderFieldItem).join("")}
+            </div>
           </div>
-          <div class="profile-field-list">
-            <div class="profile-field-item"><span class="field-label">Father's Name</span><span class="field-value">${student.fatherName || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Mother's Name</span><span class="field-value">${student.motherName || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Primary Contact</span><span class="field-value">${student.mobile || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Residential Address</span><span class="field-value">${student.address || 'Campus Address'}</span></div>
-          </div>
-        </div>
-
-        <!-- Section 3: Dataset Identifiers -->
-        <div class="profile-section-card">
-          <div class="profile-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-            <span>School Data Identifiers</span>
-          </div>
-          <div class="profile-field-list">
-            <div class="profile-field-item"><span class="field-label">Internal Record ID</span><span class="field-value">${student.id}</span></div>
-            <div class="profile-field-item"><span class="field-label">Samagra ID</span><span class="field-value">${student.samagraId || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">PAN Number</span><span class="field-value">${student.panNo || '—'}</span></div>
-            <div class="profile-field-item"><span class="field-label">Scholar Number</span><span class="field-value">${student.scholarNo || '—'}</span></div>
-          </div>
-        </div>
+        ` : ''}
       `;
     }
   }
@@ -2190,6 +2294,7 @@ function renderStudentDetailContent(studentId) {
  */
 let dobPickerInstance = null;
 let asofPickerInstance = null;
+let hasUserManuallySetAsof = false;
 
 function initAgeCalculator() {
   const dobInput = document.getElementById("age-input-dob");
@@ -2200,7 +2305,16 @@ function initAgeCalculator() {
   const asofDisplay = document.getElementById("asof-display-val");
   const calcBtn = document.getElementById("btn-calculate-age");
 
-  const currentYear = new Date().getFullYear();
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const todayISO = formatDateISO(today);
+  const todayVerbose = formatDateVerbose(today);
+
+  // If user hasn't manually chosen a date, default to current local date
+  if (!hasUserManuallySetAsof) {
+    if (asofInput) asofInput.value = todayISO;
+    if (asofDisplay) asofDisplay.textContent = todayVerbose;
+  }
 
   // 1. Create Date of Birth Picker instance
   if (dobInput && !dobPickerInstance) {
@@ -2227,11 +2341,6 @@ function initAgeCalculator() {
 
   // 2. Create Calculate Age As Of Picker instance
   if (asofInput && !asofPickerInstance) {
-    // Ensure default calculation date is strictly 31 July 2026
-    if (!asofInput.value || asofInput.value === "2026-09-30") {
-      asofInput.value = "2026-07-31";
-    }
-
     asofPickerInstance = createDatePicker({
       inputEl: asofInput,
       triggerEl: asofTrigger,
@@ -2239,8 +2348,9 @@ function initAgeCalculator() {
       title: "Calculate Age As Of",
       minYear: 1950,
       maxYear: currentYear + 5, // Allow future eligibility planning
-      defaultDate: new Date(2026, 6, 31),
+      defaultDate: today,
       onCommit: () => {
+        hasUserManuallySetAsof = true;
         clearAgeInputErrors();
         // Hide previous results if user changes the date; user must tap Calculate
         const resultsArea = document.getElementById("age-calc-results-area");
@@ -2308,8 +2418,8 @@ function executeAgeCalculation() {
     return;
   }
 
-  // Default editable general calculation date is strictly 31 July 2026
-  const asofDate = parseDateSafe(asofInput ? asofInput.value : "2026-07-31");
+  // Default editable general calculation date is current local date
+  const asofDate = parseDateSafe(asofInput && asofInput.value ? asofInput.value : formatDateISO(new Date()));
   if (!asofDate) {
     if (asofError) {
       asofError.textContent = "Invalid calculation date format.";

@@ -4,6 +4,14 @@
  */
 
 import * as XLSX from "xlsx";
+import {
+  getSectionsForClass,
+  normalizeSectionName,
+  formatClassDisplay,
+  normalizeClassLabel,
+  getSchoolDataColumns,
+  normalizeColumnLabel
+} from "../school-config.js";
 
 export const DATASET_KEYS = {
   SCHOOL_DATA: "school_data",
@@ -68,6 +76,7 @@ export const DATASET_SCHEMAS = {
       { key: "scholarNo", label: "Scholar No", aliases: ["scholar no", "scholar number", "admission no", "admission number", "roll no", "student id", "id"] }
     ],
     optionalHeaders: [
+      { key: "section", label: "Section", aliases: ["section", "sec"] },
       { key: "motherName", label: "Mother Name", aliases: ["mother name", "mother's name", "mother"] },
       { key: "address", label: "Address", aliases: ["address", "residential address", "student address"] }
     ]
@@ -158,6 +167,7 @@ export const PRESERVED_STUDENT_FIELDS = new Set([
   "schoolId",
   "dataset",
   "className",
+  "section",
   "penNo",
   "udiseId",
   "samagraId",
@@ -253,7 +263,7 @@ export function normalizeCategory(val) {
  * @param {string} schoolId - Current school identifier
  * @returns {Promise<{ valid: boolean, error?: string, students?: Array, recordCount?: number, warnings?: Array, fileName?: string }>}
  */
-export async function parseAndValidateExcel(file, datasetKey, schoolId) {
+export async function parseAndValidateExcel(file, datasetKey, schoolId, options = {}) {
   if (!file) {
     return { valid: false, error: "No file selected. Please choose an Excel file." };
   }
@@ -354,6 +364,22 @@ export async function parseAndValidateExcel(file, datasetKey, schoolId) {
     });
   }
 
+  // Map dynamic custom School Data columns if configured
+  const customColumnMapping = {}; // columnId -> colIndex
+  if (datasetKey === DATASET_KEYS.SCHOOL_DATA && options.school) {
+    const configuredSchoolCols = getSchoolDataColumns(options.school);
+    configuredSchoolCols.forEach(scCol => {
+      const targetNorm = normalizeColumnLabel(scCol.label);
+      for (let i = 0; i < normalizedHeaders.length; i++) {
+        const h = normalizedHeaders[i];
+        if (normalizeColumnLabel(h) === targetNorm || h === targetNorm) {
+          customColumnMapping[scCol.columnId] = i;
+          break;
+        }
+      }
+    });
+  }
+
   if (missingHeaders.length > 0) {
     return {
       valid: false,
@@ -449,6 +475,43 @@ export async function parseAndValidateExcel(file, datasetKey, schoolId) {
       student.scholarNo = uniqueId;
       student.rollNo = String(students.length + 1).padStart(2, "0");
       student.status = "Active";
+
+      // Dynamically populate custom fields based on school configuration
+      if (options.school) {
+        student.customFields = student.customFields || {};
+        const configuredSchoolCols = getSchoolDataColumns(options.school);
+        configuredSchoolCols.forEach(scCol => {
+          const colIdx = customColumnMapping[scCol.columnId];
+          if (colIdx !== undefined && row[colIdx] !== undefined) {
+            const rawVal = String(row[colIdx]).trim();
+            if (rawVal) {
+              const cleanedVal = normalizeStudentText(rawVal);
+              student.customFields[scCol.columnId] = cleanedVal;
+              // Backwards-compatibility for standard legacy keys
+              if (["fatherName", "motherName", "dob", "mobile", "address", "rollNo"].includes(scCol.columnId)) {
+                student[scCol.columnId] = cleanedVal;
+              }
+            }
+          }
+        });
+      }
+
+      const rawSection = getVal("section");
+      const section = normalizeSectionName(rawSection);
+
+      if (section && options.school?.sectionsEnabled) {
+        const configuredSections = getSectionsForClass(options.school, className);
+        if (configuredSections.length > 0) {
+          const isConfigured = configuredSections.some((s) => s.toUpperCase() === section.toUpperCase());
+          if (!isConfigured) {
+            warnings.push(`Row ${r + 1}: Section "${section}" is not configured for Class ${formatClassDisplay(className)}. Section was omitted.`);
+          } else {
+            student.section = section;
+          }
+        } else {
+          warnings.push(`Row ${r + 1}: Class ${formatClassDisplay(className)} has no configured sections. Section "${section}" was omitted.`);
+        }
+      }
     }
 
     // Apply centralized record normalization to ensure uppercase text and clean whitespace

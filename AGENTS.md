@@ -57,3 +57,59 @@ This document establishes permanent architectural rules, deployment standards, a
 
 12. **Preserve Existing Capabilities**:
     - Future changes must preserve existing PDF generation, Excel import/export with permissions, search, multi-field filtering, natural class sorting, and session security.
+
+13. **Sections are an Optional School-Level Capability**:
+    - Controlled by the master switch `sectionsEnabled: ON / OFF` stored on `schools/{schoolId}`.
+    - When OFF: Section UI, filters, fields, and dashboard chips are completely hidden; legacy behavior and layout remain 100% intact. Artificial sections (such as "Sec A") must NEVER be created or shown.
+    - When ON: Admin configures sections class-by-class; School Data supports section assignments, section filtering, and dashboard section strength chips.
+
+14. **Section Scope & Validation**:
+    - Section uniqueness is strictly scoped to `School + Class + Section` (case/whitespace normalized to uppercase).
+    - Nursery A and KG1 A can coexist; duplicate sections within the same class are rejected. Empty or whitespace-only section names are prohibited.
+
+15. **Section Does Not Define Student Identity**:
+    - Section represents current class placement, not permanent student identity.
+    - Changing a student's section must never alter their unique ID, create duplicate student records, or corrupt dataset relationships.
+
+16. **Critical Data Safety on Section Deletion**:
+    - Deleting a section that contains assigned students in School Data is strictly blocked in the Admin Panel to prevent orphaning records.
+    - Disabling sections via master toggle preserves section configuration and student records in Firestore so they safely restore if re-enabled (no mass-deletions on toggle).
+
+17. **Admin-Configured Sections are Authoritative in Excel Import**:
+    - School Data Excel import must validate sections against Admin-configured sections for that class.
+    - Unknown or unconfigured sections must NOT be silently created into the school configuration.
+
+18. **Student Records are Source of Truth for Counts (No N+1 Reads)**:
+    - Section strength counts are calculated in-memory from loaded student records.
+    - Never introduce separate count collections, per-section Firebase reads, or N+1 listeners.
+
+19. **Dashboard Class Card Layout & Alignment**:
+    - Every class card must maintain identical outer height and visual alignment on both mobile and desktop regardless of section count (0, 1, 2, 3, 4, 5+ sections).
+    - Progress bars are replaced with compact section tiles when Sections are ON for School Data.
+
+20. **Student List Filter & Navigation Continuity**:
+    - When Sections are ON, student filter follows strict 2-row layout: Row 1: `Class | Section | Gender`, Row 2: `Category | PDF | Excel`.
+    - Profile back navigation restores exact dataset, class, section, and search query context.
+
+21. **School Data Column Management is Admin-Only**:
+    - Column management (add, edit/rename, type, reorder, delete) is strictly restricted to Admin Panel → Manage User → School Details → Tab 7 (`7. School Data Columns`).
+    - School users have zero column-management controls and only consume the resulting configured schema.
+
+22. **Permanent Core / System Field Protection**:
+    - `scholarNo`, `studentName`, `className`, `gender`, and `category` (and `section` when enabled) are permanent core system fields.
+    - Core fields must NEVER be deleted or stripped of their essential roles in search, filtering, and student identity.
+
+23. **Stable Column IDs (Labels are Not Database Keys)**:
+    - Every School Data column must use a stable internal `columnId` (e.g., `col_xxx`).
+    - Renaming a column modifies only the human-readable display label against the same `columnId`.
+    - Human-readable labels must NEVER be used as database field identifiers or require mass student data migration upon renaming.
+
+24. **Trimmed, Case-Insensitive Column Duplicate Validation**:
+    - Column labels must be unique within each school's School Data configuration.
+    - Duplicate validation must be trimmed and case-insensitive (e.g., "Mother Name", " mother name ", "MOTHER NAME" are treated as duplicates).
+    - Save must be blocked authoritatively with clear, friendly validation feedback.
+
+25. **Data Safety on Column Deletion & Backward Compatibility**:
+    - Deleting a column requires clear confirmation and warns the administrator if student records contain data for that field.
+    - Deletion removes the column configuration and purges only that specific field's values from School Data records; never deleting student records, other columns, or core fields.
+    - Legacy student records with top-level fields (`fatherName`, `motherName`, `dob`, `mobile`, `address`, `rollNo`) remain backward-compatible without destructive migrations.

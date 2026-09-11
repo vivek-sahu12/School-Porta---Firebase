@@ -8,7 +8,12 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { getOrFetchSchoolLogoDataUrl } from "../image-resolver.js";
-import { normalizeClassLabel, formatClassDisplay } from "../school-config.js";
+import {
+  normalizeClassLabel,
+  formatClassDisplay,
+  getSchoolDataColumns,
+  getStudentFieldValue
+} from "../school-config.js";
 import { DATASET_KEYS } from "./student-service.js";
 
 /**
@@ -139,6 +144,13 @@ export const COLUMN_METADATA = {
     halign: "center",
     getValue: (st) => cleanText(formatClassDisplay(st.className))
   },
+  section: {
+    label: "Section",
+    baseWidth: 16,
+    minWidth: 14,
+    halign: "center",
+    getValue: (st) => cleanText(st.section)
+  },
   gender: {
     label: "Gender",
     baseWidth: 16,
@@ -185,6 +197,37 @@ export const COLUMN_METADATA = {
 };
 
 /**
+ * Resolves PDF Column Metadata for either standard or dynamic custom columns
+ */
+export function getPdfColumnMetadata(key, school = null) {
+  if (COLUMN_METADATA[key]) {
+    return COLUMN_METADATA[key];
+  }
+  if (school) {
+    const schoolCols = getSchoolDataColumns(school);
+    const col = schoolCols.find(c => c.columnId === key);
+    if (col) {
+      const isNum = col.type === "number" || col.type === "date" || col.type === "boolean";
+      return {
+        label: col.label,
+        baseWidth: 30,
+        minWidth: 22,
+        halign: isNum ? "center" : "left",
+        isTextCol: col.type === "text",
+        getValue: (st) => cleanText(getStudentFieldValue(st, col))
+      };
+    }
+  }
+  return {
+    label: key,
+    baseWidth: 28,
+    minWidth: 20,
+    halign: "left",
+    getValue: (st) => cleanText(st?.[key] || st?.customFields?.[key])
+  };
+}
+
+/**
  * Default fallback columns if no custom config provided
  */
 function getDefaultColumnsForDataset(datasetKey) {
@@ -223,7 +266,7 @@ function getDefaultColumnsForDataset(datasetKey) {
  * Usable Portrait width = 210mm - 20mm margins = 190mm.
  * Usable Landscape width = 297mm - 20mm margins = 277mm.
  */
-export function determineTableOrientation(datasetKey, userColumns = null) {
+export function determineTableOrientation(datasetKey, userColumns = null, school = null) {
   const columns = userColumns && userColumns.length > 0
     ? userColumns
     : getDefaultColumnsForDataset(datasetKey);
@@ -235,7 +278,7 @@ export function determineTableOrientation(datasetKey, userColumns = null) {
     if (col.type === "blank") {
       totalMinWidth += COLUMN_METADATA.blank.minWidth;
     } else {
-      const meta = COLUMN_METADATA[col.key];
+      const meta = getPdfColumnMetadata(col.key, school);
       totalMinWidth += meta ? meta.minWidth : 20;
     }
   }
@@ -259,9 +302,10 @@ export function determineTableOrientation(datasetKey, userColumns = null) {
  * @param {Array} effectiveColumns - All columns including S.No
  * @param {number} usableWidth - Total usable table width (e.g. 190mm or 277mm)
  * @param {boolean} isLandscape - Whether page is in landscape orientation
+ * @param {Object} [school] - School entity
  * @returns {Object} map of colIdx -> { cellWidth, halign }
  */
-export function calculateColumnWidths(effectiveColumns, usableWidth, isLandscape = false) {
+export function calculateColumnWidths(effectiveColumns, usableWidth, isLandscape = false, school = null) {
   const colStyles = {};
   const blankCols = [];
   const dataCols = [];
@@ -273,7 +317,7 @@ export function calculateColumnWidths(effectiveColumns, usableWidth, isLandscape
     if (col.type === "blank") {
       blankCols.push({ col, idx });
     } else {
-      const meta = col.type === "sNo" ? COLUMN_METADATA.sNo : (COLUMN_METADATA[col.key] || { baseWidth: 20, halign: "left" });
+      const meta = col.type === "sNo" ? COLUMN_METADATA.sNo : getPdfColumnMetadata(col.key, school);
       let w = meta.baseWidth;
       // In landscape, give slightly wider base width to name columns
       if (isLandscape && meta.isTextCol) {
@@ -369,7 +413,7 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
     ];
 
     // 2. Content-Aware Orientation Decision
-    const orientation = determineTableOrientation(datasetKey, userColumns);
+    const orientation = determineTableOrientation(datasetKey, userColumns, school);
     const isLandscape = orientation === "landscape";
 
     const doc = new jsPDF({
@@ -411,9 +455,8 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
       try {
         doc.addImage(logoDataUrl, "PNG", margin, headerTopY, logoDiameter, logoDiameter);
         textStartX = margin + logoDiameter + 4.5;
-      } catch (imgErr) {
-        console.warn("Error embedding circular logo into PDF, falling back:", imgErr);
-        textStartX = margin;
+      } catch (err) {
+        console.warn("Could not embed circular logo into PDF:", err);
       }
     }
 
@@ -465,11 +508,7 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
       } else if (col.type === "sNo") {
         meta = COLUMN_METADATA.sNo;
       } else {
-        meta = COLUMN_METADATA[col.key] || {
-          label: col.key,
-          halign: "left",
-          getValue: (st) => cleanText(st[col.key])
-        };
+        meta = getPdfColumnMetadata(col.key, school);
       }
 
       // Dataset-specific label refinements
@@ -485,7 +524,7 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
     const head = [headRow];
 
     // Compute precise column styles with remainder logic for Blank columns
-    const colStyles = calculateColumnWidths(effectiveColumns, usableWidth, isLandscape);
+    const colStyles = calculateColumnWidths(effectiveColumns, usableWidth, isLandscape, school);
 
     // Build body rows
     const body = students.map((st, studentIdx) => {
@@ -496,7 +535,7 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
         if (col.type === "sNo") {
           return studentIdx + 1;
         }
-        const meta = COLUMN_METADATA[col.key];
+        const meta = getPdfColumnMetadata(col.key, school);
         return meta ? meta.getValue(st, studentIdx) : cleanText(st[col.key]);
       });
     });
@@ -544,6 +583,7 @@ export async function generateStudentListPdf({ school, datasetKey, students = []
           colDef.type === "sNo" ||
           colDef.key === "scholarNo" ||
           colDef.key === "className" ||
+          colDef.key === "section" ||
           colDef.key === "gender" ||
           colDef.key === "category" ||
           colDef.key === "samagraId"

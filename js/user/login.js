@@ -17,6 +17,7 @@ import {
 
 import { enforceUserSessionRetention } from "../session-manager.js";
 import { SUPER_ADMIN_UID } from "../admin/firestore-service.js";
+import { saveDocToCache, getDocFromCache } from "../offline-store.js";
 
 // DOM Elements
 const loginForm = document.getElementById("school-login-form");
@@ -137,44 +138,12 @@ onAuthStateChanged(auth, async (user) => {
       return; // Do not auto-redirect if user was deliberately redirected to login with a reason
     }
 
-    // Check if 24-hour inactivity timer has expired
-    const lastActive = localStorage.getItem("portal_last_activity");
-    if (lastActive && (Date.now() - Number(lastActive) >= 24 * 60 * 60 * 1000)) {
-      console.warn("Session expired due to 24h inactivity on login check.");
-      const currentSessionId = localStorage.getItem("current_session_id");
-      if (currentSessionId && navigator.onLine) {
-        try {
-          await updateDoc(doc(db, "sessions", currentSessionId), {
-            status: "expired",
-            logoutTime: serverTimestamp()
-          });
-        } catch (e) { }
-      }
-      localStorage.removeItem("current_session_id");
-      localStorage.removeItem("portal_last_activity");
-      await signOut(auth);
-      showError("Your session expired due to 24 hours of inactivity. Please sign in again.");
-      return;
-    }
-
-    // Verify account existence and active status in Firestore
-    if (navigator.onLine) {
-      try {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (!userDocSnap.exists()) {
-          console.warn("Persistent session check: User account document deleted.");
-          localStorage.removeItem("current_session_id");
-          localStorage.removeItem("current_school_id");
-          localStorage.removeItem("portal_last_activity");
-          await signOut(auth);
-          showError("Your account has been deleted by an administrator.");
-          return;
-        }
-
-        const userData = userDocSnap.data();
-        if (userData.status === "Inactive" || userData.status === "Deleted") {
-          console.warn("Persistent session check: User account inactive or deleted.");
+    // Check cached revocation status for instant offline/online safety
+    try {
+      const cachedUser = await getDocFromCache("users", user.uid);
+      if (cachedUser) {
+        if (cachedUser.status === "Inactive" || cachedUser.status === "Deleted") {
+          console.warn("Persistent session check: Cached user account inactive or deleted.");
           localStorage.removeItem("current_session_id");
           localStorage.removeItem("current_school_id");
           localStorage.removeItem("portal_last_activity");
@@ -182,12 +151,16 @@ onAuthStateChanged(auth, async (user) => {
           showError("Your account has been deactivated or deleted by an administrator.");
           return;
         }
-      } catch (checkErr) {
-        console.warn("Login auth state verification note:", checkErr);
+        if (cachedUser.schoolId) {
+          localStorage.setItem("current_school_id", cachedUser.schoolId);
+        }
       }
+    } catch (cErr) {
+      console.warn("Login local cache check note:", cErr.message);
     }
 
-    // User is persistently authenticated -> navigate to dashboard
+    // User is persistently authenticated -> navigate immediately to dashboard
+    // (dashboard.js handles live background revalidation & synchronization)
     window.location.replace("./dashboard.html");
   }
 });
@@ -265,19 +238,28 @@ if (loginForm) {
         return;
       }
 
-      // Step C: Verify School Entity Status
+      // Step C: Verify School Entity Status & Cache records locally for offline-first readiness
+      let schoolData = null;
       try {
         const schoolDocRef = doc(db, "schools", userData.schoolId);
         const schoolDocSnap = await getDoc(schoolDocRef);
-        if (schoolDocSnap.exists() && schoolDocSnap.data().status === "Inactive") {
-          await signOut(auth);
-          showError("This School Institution is currently inactive. Access suspended.");
-          setLoading(false);
-          return;
+        if (schoolDocSnap.exists()) {
+          schoolData = schoolDocSnap.data();
+          if (schoolData.status === "Inactive") {
+            await signOut(auth);
+            showError("This School Institution is currently inactive. Access suspended.");
+            setLoading(false);
+            return;
+          }
+          await saveDocToCache("schools", userData.schoolId, schoolData);
         }
       } catch (schErr) {
         console.warn("School status check skipped:", schErr);
       }
+
+      // Save user record to local cache for instant offline startup
+      await saveDocToCache("users", user.uid, userData);
+      localStorage.setItem("current_school_id", userData.schoolId);
 
       // Step D: Invalidate any previous session from this exact client/device to prevent stale records
       const previousSessionId = localStorage.getItem("current_session_id");

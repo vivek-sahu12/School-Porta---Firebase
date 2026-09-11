@@ -1508,6 +1508,80 @@ input:checked + .slider::before {
   transition: width 0.3s ease;
 }
 
+/* Class Card Section Strength Display (Sections ON) */
+.class-strength-card.has-sections {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 82px;
+}
+
+.class-card-sections-area {
+  min-height: 32px;
+  max-height: 56px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.section-strength-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 3px 4px;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.section-strength-tile:hover {
+  background: #e0e7ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+  transform: translateY(-1px);
+}
+
+.section-strength-tile .section-tile-name,
+.section-strength-tile .sec-name {
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.section-strength-tile .section-tile-count,
+.section-strength-tile .sec-count {
+  font-weight: 700;
+  color: #2563eb;
+  margin-left: 2px;
+}
+
+/* 5+ Sections: Distribute across 3-column rows (e.g. 3 on Row 1, 2 on Row 2) */
+.class-card-sections-area[data-count="5"] .section-strength-tile,
+.class-card-sections-area[data-count="6"] .section-strength-tile {
+  flex: 1 1 calc(33.333% - 4px);
+}
+
+.class-card-sections-area[data-count="7"] .section-strength-tile,
+.class-card-sections-area[data-count="8"] .section-strength-tile {
+  flex: 1 1 calc(25% - 4px);
+}
+
 /* Two-Column Analytics Grid */
 .analytics-row-grid {
   display: grid;
@@ -1840,6 +1914,25 @@ input:checked + .slider::before {
   align-items: center;
 }
 
+.student-filters-row.has-sections {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 8px;
+}
+
+.student-filters-row.has-sections .student-export-actions {
+  grid-column: 2 / 4;
+  display: flex !important;
+  gap: 8px;
+  width: 100%;
+}
+
+.student-filters-row.has-sections .student-export-actions .btn-pdf-export,
+.student-filters-row.has-sections .student-export-actions .btn-excel-export {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+}
+
 .filter-select {
   padding: 6px 8px;
   font-size: 0.8rem;
@@ -1936,6 +2029,47 @@ input:checked + .slider::before {
   .student-filters-row {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: var(--student-filter-gap) !important;
+  }
+
+  .student-filters-row.has-sections {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: var(--student-filter-gap) !important;
+  }
+
+  .student-filters-row.has-sections .student-export-actions {
+    grid-column: 2 / 4;
+    display: flex !important;
+    gap: var(--student-filter-gap, 8px);
+    width: 100%;
+  }
+
+  .student-filters-row.has-sections .student-export-actions .btn-pdf-export,
+  .student-filters-row.has-sections .student-export-actions .btn-excel-export {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+  }
+
+  .student-filters-row.has-sections + .student-mobile-pdf-bar {
+    display: none !important;
+  }
+
+  .class-strength-card.has-sections {
+    min-height: 76px;
+    padding: 8px 10px;
+  }
+
+  .class-card-sections-area {
+    min-height: 28px;
+    max-height: 52px;
+    gap: 3px;
+    width: 100%;
+  }
+
+  .section-strength-tile {
+    padding: 2px 2px;
+    font-size: 0.675rem;
+    gap: 2px;
   }
 
   .filter-select {

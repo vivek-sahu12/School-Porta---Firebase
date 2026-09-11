@@ -300,3 +300,212 @@ export function highlightSearchMatches(text, query) {
   return result;
 }
 
+/**
+ * Normalizes a section name:
+ * - Trims whitespace
+ * - Collapses consecutive spaces
+ * - Converts to uppercase
+ * Example: " a " -> "A", "sec-a" -> "SEC-A"
+ * @param {*} val
+ * @returns {string}
+ */
+export function normalizeSectionName(val) {
+  if (val === null || val === undefined) return "";
+  const s = String(val).trim();
+  if (!s) return "";
+  return s.replace(/\s+/g, " ").toUpperCase();
+}
+
+/**
+ * Resolves configured section names for a given class from a school entity.
+ * Checks both normalized class label (e.g. "1") and canonical ID (e.g. "Class 1").
+ * Returns an array of section strings (e.g. ["A", "B", "C"]).
+ *
+ * @param {Object} schoolEntity School document or configuration object
+ * @param {string} className Class name to look up
+ * @returns {string[]} Array of configured section names
+ */
+export function getSectionsForClass(schoolEntity, className) {
+  if (!schoolEntity || !schoolEntity.sectionsEnabled || !schoolEntity.sections) {
+    return [];
+  }
+  const sections = schoolEntity.sections;
+  if (typeof sections !== "object" || sections === null) return [];
+
+  const norm = normalizeClassLabel(className);
+  const raw = String(className || "").trim();
+
+  const found = sections[norm] || sections[raw] || sections[formatClassDisplay(className)];
+  if (Array.isArray(found)) {
+    return found.map(s => typeof s === "string" ? s.trim() : (s?.name ? String(s.name).trim() : "")).filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * Supported Column Types for Custom School Data Fields
+ */
+export const SUPPORTED_COLUMN_TYPES = [
+  { id: "text", label: "Text" },
+  { id: "number", label: "Number" },
+  { id: "date", label: "Date" },
+  { id: "phone", label: "Phone" },
+  { id: "boolean", label: "Yes/No (Boolean)" }
+];
+
+/**
+ * Permanent Core System Fields for School Data (Mandatory & Protected from Deletion)
+ */
+export const CORE_SCHOOL_DATA_COLUMNS = [
+  { columnId: "scholarNo", label: "Scholar No", type: "text", isCore: true, order: 1 },
+  { columnId: "studentName", label: "Student Name", type: "text", isCore: true, order: 2 },
+  { columnId: "className", label: "Class", type: "text", isCore: true, order: 3 },
+  { columnId: "gender", label: "Gender", type: "text", isCore: true, order: 4 },
+  { columnId: "category", label: "Category", type: "text", isCore: true, order: 5 }
+];
+
+/**
+ * Standard Default Columns populated for legacy schools without custom column config
+ */
+export const DEFAULT_SCHOOL_DATA_COLUMNS = [
+  { columnId: "scholarNo", label: "Scholar No", type: "text", isCore: true, order: 1 },
+  { columnId: "studentName", label: "Student Name", type: "text", isCore: true, order: 2 },
+  { columnId: "className", label: "Class", type: "text", isCore: true, order: 3 },
+  { columnId: "gender", label: "Gender", type: "text", isCore: true, order: 4 },
+  { columnId: "category", label: "Category", type: "text", isCore: true, order: 5 },
+  { columnId: "fatherName", label: "Father Name", type: "text", isCore: false, order: 6 },
+  { columnId: "motherName", label: "Mother Name", type: "text", isCore: false, order: 7 },
+  { columnId: "dob", label: "Date of Birth", type: "date", isCore: false, order: 8 },
+  { columnId: "mobile", label: "Mobile Number", type: "phone", isCore: false, order: 9 },
+  { columnId: "address", label: "Address", type: "text", isCore: false, order: 10 },
+  { columnId: "rollNo", label: "Roll Number", type: "number", isCore: false, order: 11 }
+];
+
+/**
+ * Normalizes a column label for trimmed, case-insensitive comparison.
+ * @param {string} label
+ * @returns {string}
+ */
+export function normalizeColumnLabel(label) {
+  if (!label || typeof label !== "string") return "";
+  return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Resolves the effective School Data columns for a given school entity.
+ * - Prioritizes school.schoolDataColumns (or schoolDataConfig.columns).
+ * - Falls back to DEFAULT_SCHOOL_DATA_COLUMNS.
+ * - Always ensures all CORE_SCHOOL_DATA_COLUMNS are preserved.
+ * - Dynamically includes `section` when sections are enabled.
+ * - Returns clean array sorted by column order.
+ *
+ * @param {Object} school
+ * @returns {Array<Object>}
+ */
+export function getSchoolDataColumns(school) {
+  let cols = [];
+  if (Array.isArray(school?.schoolDataColumns) && school.schoolDataColumns.length > 0) {
+    cols = school.schoolDataColumns.map(c => ({ ...c }));
+  } else if (Array.isArray(school?.schoolDataConfig?.columns) && school.schoolDataConfig.columns.length > 0) {
+    cols = school.schoolDataConfig.columns.map(c => ({ ...c }));
+  } else {
+    cols = DEFAULT_SCHOOL_DATA_COLUMNS.map(c => ({ ...c }));
+  }
+
+  // Ensure all core system columns exist in the configuration
+  CORE_SCHOOL_DATA_COLUMNS.forEach(core => {
+    const exists = cols.some(c => c.columnId === core.columnId);
+    if (!exists) {
+      cols.unshift({ ...core });
+    }
+  });
+
+  // Ensure isCore flag is strictly enforced on core columns
+  const coreIds = new Set(CORE_SCHOOL_DATA_COLUMNS.map(c => c.columnId));
+  cols.forEach(c => {
+    if (coreIds.has(c.columnId)) {
+      c.isCore = true;
+    }
+  });
+
+  // Dynamically handle 'section' column based on master toggle
+  const sectionsOn = Boolean(school?.sectionsEnabled);
+  const secIdx = cols.findIndex(c => c.columnId === "section");
+
+  if (sectionsOn) {
+    if (secIdx === -1) {
+      // Insert Section immediately after Class
+      const classIdx = cols.findIndex(c => c.columnId === "className");
+      const insertAt = classIdx !== -1 ? classIdx + 1 : 3;
+      cols.splice(insertAt, 0, {
+        columnId: "section",
+        label: "Section",
+        type: "text",
+        isCore: true,
+        isSystem: true,
+        order: insertAt + 1
+      });
+    } else {
+      cols[secIdx].isCore = true;
+      cols[secIdx].isSystem = true;
+    }
+  } else if (secIdx !== -1) {
+    // Hide section completely when master toggle is OFF
+    cols.splice(secIdx, 1);
+  }
+
+  // Sort by order ascending
+  cols.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+
+  // Normalize order values 1, 2, 3...
+  cols.forEach((c, idx) => {
+    c.order = idx + 1;
+  });
+
+  return cols;
+}
+
+/**
+ * Safely resolves a student field value given a column definition.
+ * Looks up customFields[columnId], student[columnId], or student[legacyKey].
+ *
+ * @param {Object} student
+ * @param {Object|string} column
+ * @returns {any}
+ */
+export function getStudentFieldValue(student, column) {
+  if (!student) return "";
+  const columnId = typeof column === "string" ? column : (column?.columnId || column?.key);
+  if (!columnId) return "";
+
+  // 1. Direct customFields mapping
+  if (student.customFields && student.customFields[columnId] !== undefined && student.customFields[columnId] !== null) {
+    return student.customFields[columnId];
+  }
+
+  // 2. Direct top-level property
+  if (student[columnId] !== undefined && student[columnId] !== null) {
+    return student[columnId];
+  }
+
+  // 3. Fallback aliases for legacy fields
+  const aliases = {
+    fatherName: ["father_name", "father", "fatherName"],
+    motherName: ["mother_name", "mother", "motherName"],
+    scholarNo: ["scholar_no", "admissionNo", "id"],
+    mobile: ["phone", "phoneNumber", "contact"]
+  };
+
+  const aliasList = aliases[columnId];
+  if (Array.isArray(aliasList)) {
+    for (const al of aliasList) {
+      if (student[al] !== undefined && student[al] !== null) {
+        return student[al];
+      }
+    }
+  }
+
+  return "";
+}
+
+

@@ -110,32 +110,23 @@ export function recordUserActivity() {
 }
 
 /**
- * Check if the 24-hour inactivity period has elapsed
+ * Check if the session is expired due to inactivity
+ * (Disabled to enforce persistent authentication per requirement: No mandatory daily logouts)
  */
 export function isSessionExpiredDueToInactivity() {
-  const lastActive = getLastActivityTimestamp();
-  if (!lastActive) return false;
-  const elapsed = Date.now() - lastActive;
-  return elapsed >= INACTIVITY_TIMEOUT_MS;
+  return false;
 }
 
 /**
- * Start monitoring genuine user interactions to track 24-hour activity
+ * Start monitoring genuine user interactions to track activity timestamps
  */
 export function initInactivityTracker(onTimeout) {
-  // 1. If no activity timestamp has ever been set (fresh session start), initialize it
+  // 1. Initialize activity timestamp on fresh session start
   if (!getLastActivityTimestamp()) {
     localStorage.setItem(STORAGE_KEY_LAST_ACTIVITY, String(Date.now()));
   }
 
-  // 2. Check immediately on startup if already expired (e.g. user left computer for >24h and came back)
-  if (isSessionExpiredDueToInactivity()) {
-    console.warn("Session expired due to 24 hours of inactivity on load.");
-    if (onTimeout) onTimeout("Your session expired due to 24 hours of inactivity.");
-    return;
-  }
-
-  // 3. User interaction event listeners
+  // 2. User interaction event listeners to record active usage
   const activityEvents = ["mousedown", "keydown", "touchstart", "scroll", "input", "click"];
   const handleActivity = () => {
     recordUserActivity();
@@ -144,17 +135,6 @@ export function initInactivityTracker(onTimeout) {
   activityEvents.forEach((evt) => {
     window.addEventListener(evt, handleActivity, { passive: true });
   });
-
-  // 4. Periodic background check for 24-hour expiration (checks every 30 seconds)
-  if (inactivityCheckInterval) clearInterval(inactivityCheckInterval);
-  inactivityCheckInterval = setInterval(() => {
-    if (isSessionExpiredDueToInactivity()) {
-      console.warn("24-hour inactivity timeout reached.");
-      if (onTimeout) {
-        onTimeout("Your session expired due to 24 hours of inactivity.");
-      }
-    }
-  }, 30000);
 }
 
 /**
@@ -304,8 +284,8 @@ export async function verifyAuthoritativeSession(user, onRevoked) {
     // 1. Verify User Document
     const userDocRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userDocRef);
-    if (!userSnap.exists()) {
-      console.warn("Authoritative session check: User record deleted in Firestore.");
+    if (!userSnap.exists() && !userSnap.metadata?.fromCache) {
+      console.warn("Authoritative session check: User record confirmed deleted in Firestore.");
       if (onRevoked) onRevoked("Your account has been deleted by an administrator.");
       return { valid: false, reason: "account_deleted" };
     }

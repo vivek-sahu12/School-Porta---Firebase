@@ -437,9 +437,12 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
-              <div class="student-filters-row">
+              <div class="student-filters-row" id="student-filters-row">
                 <select id="filter-class-select" class="form-select filter-select" aria-label="Filter by class">
                   <option value="">All Classes</option>
+                </select>
+                <select id="filter-section-select" class="form-select filter-select filter-section-select" aria-label="Filter by section" style="display: none;">
+                  <option value="">All Sections</option>
                 </select>
                 <select id="filter-gender-select" class="form-select filter-select" aria-label="Filter by gender">
                   <option value="">All Genders</option>
@@ -643,7 +646,7 @@
                   <div class="age-input-error" id="dob-error-msg" style="display: none;"></div>
                 </div>
 
-                <!-- Step 2: Calculate Age As Of (Default: 31 July 2026, Single Editable Field) -->
+                <!-- Step 2: Calculate Age As Of (Default: Current Local Date, Single Editable Field) -->
                 <div class="form-group age-form-group">
                   <label class="age-form-label" for="btn-trigger-asof">
                     <span class="step-badge">2</span>
@@ -654,11 +657,11 @@
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     </div>
                     <div class="trigger-content">
-                      <span class="trigger-display-val" id="asof-display-val">31 July 2026</span>
+                      <span class="trigger-display-val" id="asof-display-val"></span>
                     </div>
                     <svg class="trigger-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
                   </button>
-                  <input type="hidden" id="age-input-asof" value="2026-07-31">
+                  <input type="hidden" id="age-input-asof" value="">
                   <div class="age-input-error" id="asof-error-msg" style="display: none;"></div>
                 </div>
 

@@ -17,7 +17,10 @@ import {
   enforceUserSessionRetention,
   cleanupOldSessions,
   uploadSchoolDataset,
-  getSchoolDatasetSummaries
+  getSchoolDatasetSummaries,
+  getSchoolDatasetStudents,
+  saveSchoolColumns,
+  deleteSchoolColumnData
 } from "./firestore-service.js";
 import {
   parseAndValidateExcel,
@@ -29,7 +32,18 @@ import {
   CANONICAL_CLASSES,
   STANDARD_SENIOR_SUBJECTS,
   validateClassRange,
-  includesSeniorClasses
+  includesSeniorClasses,
+  getClassesInRange,
+  formatClassDisplay,
+  normalizeClassLabel,
+  normalizeSectionName,
+  getSectionsForClass,
+  escapeHtml,
+  SUPPORTED_COLUMN_TYPES,
+  CORE_SCHOOL_DATA_COLUMNS,
+  getSchoolDataColumns,
+  normalizeColumnLabel,
+  getStudentFieldValue
 } from "../school-config.js";
 
 /**
@@ -329,9 +343,11 @@ function setupNavigation() {
       populateAdminProfile();
     }
 
-    // Close sidebar drawer on navigation
+    // Close sidebar drawer & overlay on navigation
     const sidebar = document.getElementById("sidebar");
     if (sidebar) sidebar.classList.remove("open");
+    const overlay = document.getElementById("sidebar-overlay");
+    if (overlay) overlay.classList.remove("active");
 
     // Sync mobile bottom nav active state
     const bottomNavItems = document.querySelectorAll(".bottom-nav-item");
@@ -365,8 +381,12 @@ window.switchSchoolTab = (tabName) => {
   const panes = parent.querySelectorAll(".school-tab-pane");
 
   tabs.forEach((t) => {
-    if (t.getAttribute("data-tab") === tabName) t.classList.add("active");
-    else t.classList.remove("active");
+    if (t.getAttribute("data-tab") === tabName) {
+      t.classList.add("active");
+      try { t.scrollIntoView({ inline: "nearest", behavior: "smooth", block: "nearest" }); } catch (e) {}
+    } else {
+      t.classList.remove("active");
+    }
   });
 
   panes.forEach((p) => {
@@ -376,6 +396,10 @@ window.switchSchoolTab = (tabName) => {
 
   if (tabName === "student-data" && selectedSchool) {
     updateStudentUploadModule(selectedSchool);
+  } else if (tabName === "sections" && selectedSchool) {
+    renderSchoolSectionsTab(selectedSchool);
+  } else if (tabName === "columns" && selectedSchool) {
+    renderSchoolColumnsTab(selectedSchool);
   }
 };
 
@@ -391,8 +415,12 @@ window.switchSettingsTab = (tabName) => {
   const panes = parent.querySelectorAll(".school-tab-pane");
 
   tabs.forEach((t) => {
-    if (t.getAttribute("data-tab") === tabName) t.classList.add("active");
-    else t.classList.remove("active");
+    if (t.getAttribute("data-tab") === tabName) {
+      t.classList.add("active");
+      try { t.scrollIntoView({ inline: "nearest", behavior: "smooth", block: "nearest" }); } catch (e) {}
+    } else {
+      t.classList.remove("active");
+    }
   });
 
   panes.forEach((p) => {
@@ -1077,6 +1105,12 @@ function refreshSchoolDetailsView() {
   // Tab 5: Student Data Upload State
   updateStudentUploadModule(s);
 
+  // Tab 6: Section Management State
+  renderSchoolSectionsTab(s);
+
+  // Tab 7: School Data Columns State
+  renderSchoolColumnsTab(s);
+
   const startCls = s.startingClass || "Nursery";
   const endCls = s.endingClass || "Class 10";
   setText("info-school-class-range", `${startCls} → ${endCls}`);
@@ -1163,19 +1197,19 @@ function renderSchoolUsersList(schoolId) {
 
     return `
       <tr>
-        <td>
+        <td data-label="User">
           <div style="font-weight: 700; color: var(--text-main); font-size: 0.9rem;">${u.displayName || u.name}</div>
           <div style="font-size: 0.75rem; color: var(--text-muted);">${u.email || '—'}</div>
         </td>
-        <td><span style="font-size: 0.85rem;">${u.email || '—'}</span></td>
-        <td><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status || 'Active'}</span></td>
-        <td><span style="font-size: 0.85rem; font-weight: 600;">${u.deviceLimit || 3} Devices</span></td>
-        <td>
+        <td data-label="Email"><span style="font-size: 0.85rem;">${u.email || '—'}</span></td>
+        <td data-label="Status"><span class="badge ${u.status === 'Active' ? 'badge-active' : 'badge-inactive'}">${u.status || 'Active'}</span></td>
+        <td data-label="Limit"><span style="font-size: 0.85rem; font-weight: 600;">${u.deviceLimit || 3} Devices</span></td>
+        <td data-label="Devices">
           <span style="font-size: 0.85rem; font-weight: 700; color: ${activeDevCount >= (u.deviceLimit || 3) ? '#dc2626' : '#2563eb'};">
             ${activeDevCount} / ${u.deviceLimit || 3} Active
           </span>
         </td>
-        <td>
+        <td data-label="Permissions">
           <div style="display: flex; gap: 4px; flex-wrap: wrap;">
             ${p.editable ? '<span class="badge badge-active" style="font-size:0.675rem;">Editable</span>' : ''}
             ${p.addStudent ? '<span class="badge badge-active" style="font-size:0.675rem;">+Student</span>' : ''}
@@ -1225,18 +1259,18 @@ function renderSchoolSessionsList(schoolId) {
 
     return `
       <tr>
-        <td>
+        <td data-label="Account">
           <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">${userObj ? (userObj.displayName || userObj.name) : (ses.userName || 'School User')}</div>
           <div style="font-size: 0.75rem; color: var(--text-muted);">${userObj?.email || ses.userEmail || ''}</div>
         </td>
-        <td>
+        <td data-label="Device">
           <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">${ses.deviceName || 'Web Browser'}</div>
           ${isCurrent ? '<span class="badge" style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-size:0.675rem; font-weight:700;">Current Device</span>' : '<span style="font-size:0.7rem; color:var(--text-muted);">Other Device</span>'}
         </td>
-        <td><span style="font-family: monospace; font-size: 0.725rem; color: var(--text-muted);">${ses.deviceId || 'DEV'}</span></td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLoginTime || 'Active'}</span></td>
-        <td><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLastActive || 'Now'}</span></td>
-        <td><span class="badge badge-active">Active</span></td>
+        <td data-label="Device ID"><span style="font-family: monospace; font-size: 0.725rem; color: var(--text-muted);">${ses.deviceId || 'DEV'}</span></td>
+        <td data-label="Login Time"><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLoginTime || 'Active'}</span></td>
+        <td data-label="Last Active"><span style="font-size: 0.8rem; color: var(--text-muted);">${ses.formattedLastActive || 'Now'}</span></td>
+        <td data-label="Status"><span class="badge badge-active">Active</span></td>
         <td style="text-align: right;">
           <button class="btn btn-danger-outline btn-sm" onclick="window.forceLogoutSession('${ses.sessionId || ses.id}')">
             Force Logout
@@ -1941,14 +1975,24 @@ if (savePermsBtn) {
  */
 function setupMobileDrawer() {
   const btn = document.getElementById("mobile-menu-btn");
+  const closeBtn = document.getElementById("sidebar-close-btn");
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("sidebar-overlay");
+
   if (btn && sidebar) {
     btn.addEventListener("click", () => {
       sidebar.classList.toggle("open");
       if (overlay) overlay.classList.toggle("active", sidebar.classList.contains("open"));
     });
   }
+
+  if (closeBtn && sidebar) {
+    closeBtn.addEventListener("click", () => {
+      sidebar.classList.remove("open");
+      if (overlay) overlay.classList.remove("active");
+    });
+  }
+
   if (overlay && sidebar) {
     overlay.addEventListener("click", () => {
       sidebar.classList.remove("open");
@@ -2149,7 +2193,7 @@ window.handleStudentExcelFileSelected = async (event) => {
 
   // Pre-validate file client-side
   const schoolId = selectedSchool?.schoolId || "";
-  const result = await parseAndValidateExcel(file, currentUploadDataset, schoolId);
+  const result = await parseAndValidateExcel(file, currentUploadDataset, schoolId, { school: selectedSchool });
 
   if (!result.valid) {
     parsedStudentData = null;
@@ -2315,6 +2359,756 @@ window.executeStudentDatasetUpload = async () => {
   } finally {
     isUploadingDataset = false;
     if (spinnerEl) spinnerEl.style.display = "none";
+  }
+};
+
+/**
+ * ============================================================================
+ * 7. SCHOOL SECTION MANAGEMENT (Class-Wise Sections & Toggle)
+ * ============================================================================
+ */
+
+let isSavingSection = false;
+
+/**
+ * Render Section Configuration Tab for a School
+ */
+function renderSchoolSectionsTab(school) {
+  if (!school) return;
+
+  const schoolNameEl = document.getElementById("sd-sections-school-name");
+  if (schoolNameEl) {
+    schoolNameEl.textContent = school.schoolName || school.name || school.schoolId || "School";
+  }
+
+  const toggle = document.getElementById("sd-sections-master-toggle");
+  if (toggle) {
+    toggle.checked = !!school.sectionsEnabled;
+  }
+
+  const container = document.getElementById("sd-sections-class-container");
+  if (!container) return;
+
+  if (!school.sectionsEnabled) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 36px 16px; background: #fafafa; border: 1px dashed var(--border); border-radius: var(--radius-md);">
+        <svg style="width: 36px; height: 36px; color: var(--text-muted); margin-bottom: 8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">Sections are Disabled</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); max-width: 380px; margin: 4px auto 0;">
+          Enable the master switch above to configure class-wise sections, activate student section filters, and view dashboard section strength.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const startCls = school.startingClass || "Nursery";
+  const endCls = school.endingClass || "Class 10";
+  const classes = getClassesInRange(startCls, endCls);
+
+  if (classes.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 24px; font-size: 0.85rem;">
+        No classes configured within range (${escapeHtml(startCls)} → ${escapeHtml(endCls)}). Please verify School Information class range.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = classes.map((cls) => {
+    const sections = getSectionsForClass(school, cls);
+    const displayClass = formatClassDisplay(cls);
+
+    return `
+      <div class="section-class-card">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <span style="font-weight: 700; font-size: 0.9rem; min-width: 80px; color: var(--text-main);">${escapeHtml(displayClass)}</span>
+          <div class="section-chips-list">
+            ${sections.length > 0 ? sections.map((sec) => `
+              <span class="section-admin-chip">
+                <span>${escapeHtml(sec)}</span>
+                <button type="button" class="chip-delete-btn" title="Delete Section ${escapeHtml(sec)}" onclick="window.handleDeleteSection('${escapeHtml(cls)}', '${escapeHtml(sec)}')">&times;</button>
+              </span>
+            `).join("") : `<span style="font-size: 0.775rem; color: var(--text-muted); font-style: italic;">No sections configured</span>`}
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.openAddSectionModal('${escapeHtml(cls)}')">+ Add Section</button>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Toggle School Sections Master Switch (ON/OFF)
+ */
+window.handleToggleSchoolSections = async (checked) => {
+  if (!selectedSchool) return;
+
+  const toggle = document.getElementById("sd-sections-master-toggle");
+  if (toggle) toggle.disabled = true;
+
+  try {
+    await updateSchool(selectedSchool.schoolId, {
+      sectionsEnabled: checked
+    });
+
+    selectedSchool.sectionsEnabled = checked;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], sectionsEnabled: checked };
+    }
+
+    renderSchoolSectionsTab(selectedSchool);
+    showToast(checked ? "Sections enabled for this school." : "Sections disabled for this school.", "success");
+  } catch (err) {
+    console.error("Toggle sections error:", err);
+    if (toggle) toggle.checked = !checked;
+    showToast("Failed to update sections setting.", "error");
+  } finally {
+    if (toggle) toggle.disabled = false;
+  }
+};
+
+/**
+ * Open Modal to Add a Section to a Class
+ */
+window.openAddSectionModal = (className) => {
+  if (!selectedSchool) return;
+
+  const targetInput = document.getElementById("add-section-class-target");
+  const titleEl = document.getElementById("add-section-modal-title");
+  const subEl = document.getElementById("add-section-modal-sub");
+  const nameInput = document.getElementById("add-section-name-input");
+  const errorEl = document.getElementById("add-section-error-msg");
+
+  if (targetInput) targetInput.value = className;
+  if (titleEl) titleEl.textContent = `Add Section to ${formatClassDisplay(className)}`;
+  if (subEl) subEl.textContent = `School: ${selectedSchool.schoolName || selectedSchool.name || selectedSchool.schoolId}`;
+  if (nameInput) {
+    nameInput.value = "";
+    setTimeout(() => nameInput.focus(), 150);
+  }
+  if (errorEl) {
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+  }
+
+  openModal("modal-add-section");
+};
+
+/**
+ * Handle Save Section Form Submit
+ */
+window.handleSaveSection = async (event) => {
+  event.preventDefault();
+  if (!selectedSchool || isSavingSection) return;
+
+  const targetClass = document.getElementById("add-section-class-target")?.value || "";
+  const nameInput = document.getElementById("add-section-name-input");
+  const errorEl = document.getElementById("add-section-error-msg");
+  const saveBtn = document.getElementById("btn-save-section");
+
+  const rawVal = nameInput ? nameInput.value : "";
+  const sectionName = normalizeSectionName(rawVal);
+
+  if (!sectionName) {
+    if (errorEl) {
+      errorEl.textContent = "Please enter a valid section name (e.g. A, B).";
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  // Scoped uniqueness validation: School + Class + Section (case/whitespace insensitive)
+  const existingSections = getSectionsForClass(selectedSchool, targetClass);
+  const isDuplicate = existingSections.some((s) => s.toUpperCase() === sectionName.toUpperCase());
+
+  if (isDuplicate) {
+    if (errorEl) {
+      errorEl.textContent = `Section "${sectionName}" already exists for ${formatClassDisplay(targetClass)}.`;
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  isSavingSection = true;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
+  try {
+    const normCls = normalizeClassLabel(targetClass);
+    const updatedSections = { ...(selectedSchool.sections || {}) };
+    const currentClassList = [ ...(updatedSections[normCls] || updatedSections[targetClass] || []) ];
+    currentClassList.push(sectionName);
+    updatedSections[normCls] = currentClassList;
+
+    await updateSchool(selectedSchool.schoolId, {
+      sections: updatedSections
+    });
+
+    selectedSchool.sections = updatedSections;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], sections: updatedSections };
+    }
+
+    closeModal("modal-add-section");
+    renderSchoolSectionsTab(selectedSchool);
+    showToast(`Section ${sectionName} added to ${formatClassDisplay(targetClass)}.`, "success");
+  } catch (err) {
+    console.error("Save section error:", err);
+    if (errorEl) {
+      errorEl.textContent = "Failed to save section. Please try again.";
+      errorEl.style.display = "block";
+    }
+    showToast("Failed to save section.", "error");
+  } finally {
+    isSavingSection = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Section";
+    }
+  }
+};
+
+/**
+ * Handle Delete Section with Strict Student Assignment Safety Check
+ */
+window.handleDeleteSection = async (className, sectionName) => {
+  if (!selectedSchool) return;
+
+  const displayClass = formatClassDisplay(className);
+  const normCls = normalizeClassLabel(className);
+  const normSec = normalizeSectionName(sectionName);
+
+  try {
+    // 1. Critical Data Safety Check: Verify no students in School Data are assigned to this section
+    const students = await getSchoolDatasetStudents(selectedSchool.schoolId, "school_data");
+    const assignedStudents = students.filter((st) => {
+      const stClass = normalizeClassLabel(st.className);
+      const stSec = normalizeSectionName(st.section);
+      return stClass === normCls && stSec === normSec;
+    });
+
+    if (assignedStudents.length > 0) {
+      showToast(
+        `Cannot delete Section ${sectionName}: ${assignedStudents.length} student(s) currently assigned in ${displayClass}. Please reassign or remove them first.`,
+        "error"
+      );
+      return;
+    }
+
+    // 2. Safe deletion confirmation
+    const confirmed = window.confirm(`Are you sure you want to delete Section "${sectionName}" from ${displayClass}?`);
+    if (!confirmed) return;
+
+    const updatedSections = { ...(selectedSchool.sections || {}) };
+    const currentList = updatedSections[normCls] || updatedSections[className] || [];
+    updatedSections[normCls] = currentList.filter((s) => normalizeSectionName(s) !== normSec);
+
+    await updateSchool(selectedSchool.schoolId, {
+      sections: updatedSections
+    });
+
+    selectedSchool.sections = updatedSections;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], sections: updatedSections };
+    }
+
+    renderSchoolSectionsTab(selectedSchool);
+    showToast(`Section ${sectionName} deleted from ${displayClass}.`, "success");
+  } catch (err) {
+    console.error("Delete section error:", err);
+    showToast("Failed to delete section.", "error");
+  }
+};
+
+/**
+ * ============================================================================
+ * DYNAMIC SCHOOL DATA COLUMN MANAGEMENT (ADMIN ONLY)
+ * ============================================================================
+ */
+let isSavingColumn = false;
+
+/**
+ * Render Dynamic School Data Columns Configuration Tab for a School
+ */
+function renderSchoolColumnsTab(school) {
+  if (!school) return;
+
+  const schoolNameEl = document.getElementById("sd-columns-school-name");
+  if (schoolNameEl) {
+    schoolNameEl.textContent = school.schoolName || school.name || school.schoolId || "School";
+  }
+
+  const container = document.getElementById("sd-columns-container");
+  if (!container) return;
+
+  const cols = getSchoolDataColumns(school);
+  if (cols.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; color: var(--text-muted); padding: 36px 16px; background: #fafafa; border: 1px dashed var(--border); border-radius: var(--radius-md);">
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">No Columns Configured</div>
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Click "+ Add Column" to define student fields.</div>
+      </div>
+    `;
+    return;
+  }
+
+  const typeLabels = {
+    text: "Text",
+    number: "Number",
+    date: "Date",
+    phone: "Phone",
+    boolean: "Yes/No"
+  };
+
+  const totalCols = cols.length;
+
+  container.innerHTML = cols.map((col, index) => {
+    const isFirst = index === 0;
+    const isLast = index === totalCols - 1;
+    const isCore = !!col.isCore;
+    const isSystem = !!col.isSystem; // e.g. Section
+    const colTypeLabel = typeLabels[col.type] || (col.type ? String(col.type).toUpperCase() : "Text");
+
+    return `
+      <div class="column-item-card" data-column-id="${escapeHtml(col.columnId)}">
+        <!-- Left: Order Badge + Label + Type Metadata -->
+        <div class="column-item-left">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: #f1f5f9; color: #475569; font-weight: 700; font-size: 0.8rem; flex-shrink: 0;" title="Order Position: ${col.order}">
+            ${col.order}
+          </span>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span style="font-weight: 700; font-size: 0.925rem; color: var(--text-main); word-break: break-word;">${escapeHtml(col.label)}</span>
+              ${isCore ? `
+                <span class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 0.675rem; padding: 1px 6px; font-weight: 700; border-radius: 4px;">
+                  ${isSystem ? 'SYSTEM' : 'CORE'}
+                </span>
+              ` : `
+                <span class="badge" style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; font-size: 0.675rem; padding: 1px 6px; font-weight: 700; border-radius: 4px;">
+                  CUSTOM
+                </span>
+              `}
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+              <span>Type: <strong style="color: var(--text-main); font-weight: 600;">${escapeHtml(colTypeLabel)}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Touch-Friendly Up / Down Reorder + Edit + Delete Actions -->
+        <div class="column-item-actions">
+          <!-- Reorder Up -->
+          <button type="button" class="btn btn-secondary btn-sm" style="padding: 5px 8px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" title="Move Up" ${isFirst ? 'disabled style="opacity: 0.35; cursor: not-allowed;"' : ''} onclick="window.handleMoveColumn('${escapeHtml(col.columnId)}', -1)">
+            <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          </button>
+          <!-- Reorder Down -->
+          <button type="button" class="btn btn-secondary btn-sm" style="padding: 5px 8px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;" title="Move Down" ${isLast ? 'disabled style="opacity: 0.35; cursor: not-allowed;"' : ''} onclick="window.handleMoveColumn('${escapeHtml(col.columnId)}', 1)">
+            <svg style="width: 14px; height: 14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          <!-- Edit / Rename -->
+          <button type="button" class="btn btn-secondary btn-sm" style="padding: 5px 10px; font-size: 0.775rem; font-weight: 600; min-height: 32px;" onclick="window.openEditColumnModal('${escapeHtml(col.columnId)}')">
+            Edit
+          </button>
+          <!-- Delete (Custom fields only, Core fields protected) -->
+          ${!isCore ? `
+            <button type="button" class="btn btn-danger-outline btn-sm" style="padding: 5px 10px; font-size: 0.775rem; font-weight: 600; min-height: 32px;" onclick="window.openDeleteColumnModal('${escapeHtml(col.columnId)}')">
+              Delete
+            </button>
+          ` : `
+            <button type="button" class="btn btn-secondary btn-sm" style="padding: 5px 10px; font-size: 0.775rem; font-weight: 600; min-height: 32px; opacity: 0.45; cursor: not-allowed;" title="Core system fields are mandatory and cannot be deleted." disabled>
+              Delete
+            </button>
+          `}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/**
+ * Open Modal to Add a New School Data Column
+ */
+window.openAddColumnModal = () => {
+  if (!selectedSchool) return;
+
+  const subEl = document.getElementById("add-col-modal-sub");
+  if (subEl) {
+    subEl.textContent = `School: ${selectedSchool.schoolName || selectedSchool.name || selectedSchool.schoolId}`;
+  }
+
+  const nameInput = document.getElementById("add-col-name-input");
+  const typeSelect = document.getElementById("add-col-type-select");
+  const errorEl = document.getElementById("add-col-error-msg");
+
+  if (nameInput) {
+    nameInput.value = "";
+    setTimeout(() => nameInput.focus(), 150);
+  }
+  if (typeSelect) typeSelect.value = "text";
+  if (errorEl) {
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+  }
+
+  openModal("modal-add-column");
+};
+
+/**
+ * Handle Save New Column Form Submit
+ */
+window.handleSaveNewColumn = async (event) => {
+  event.preventDefault();
+  if (!selectedSchool || isSavingColumn) return;
+
+  const nameInput = document.getElementById("add-col-name-input");
+  const typeSelect = document.getElementById("add-col-type-select");
+  const errorEl = document.getElementById("add-col-error-msg");
+  const saveBtn = document.getElementById("btn-save-new-column");
+
+  const rawLabel = (nameInput?.value || "").trim();
+  const colType = typeSelect?.value || "text";
+
+  if (!rawLabel) {
+    if (errorEl) {
+      errorEl.textContent = "Please enter a valid column name.";
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const normNew = normalizeColumnLabel(rawLabel);
+
+  // Authoritative duplicate validation: trimmed, case-insensitive
+  const isDuplicate = currentCols.some((c) => normalizeColumnLabel(c.label) === normNew);
+  if (isDuplicate) {
+    if (errorEl) {
+      errorEl.textContent = `Column "${rawLabel}" already exists for this school.`;
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  // Generate permanent, stable internal columnId
+  const stableId = `col_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+  const newColumn = {
+    columnId: stableId,
+    label: rawLabel,
+    type: colType,
+    order: currentCols.length + 1,
+    isCore: false
+  };
+
+  const updatedCols = [...currentCols, newColumn];
+  // Ensure order is normalized 1..N
+  updatedCols.forEach((c, idx) => { c.order = idx + 1; });
+
+  isSavingColumn = true;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Adding...";
+  }
+
+  try {
+    await saveSchoolColumns(selectedSchool.schoolId, updatedCols);
+
+    selectedSchool.schoolDataColumns = updatedCols;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], schoolDataColumns: updatedCols };
+    }
+
+    closeModal("modal-add-column");
+    renderSchoolColumnsTab(selectedSchool);
+    showToast(`Column "${rawLabel}" added successfully.`, "success");
+  } catch (err) {
+    console.error("Save new column error:", err);
+    if (errorEl) {
+      errorEl.textContent = "Failed to add column. Please check network and try again.";
+      errorEl.style.display = "block";
+    }
+    showToast("Failed to add column.", "error");
+  } finally {
+    isSavingColumn = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Add Column";
+    }
+  }
+};
+
+/**
+ * Open Modal to Edit / Rename Column
+ */
+window.openEditColumnModal = (columnId) => {
+  if (!selectedSchool || !columnId) return;
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const col = currentCols.find((c) => c.columnId === columnId);
+  if (!col) return;
+
+  const idInput = document.getElementById("edit-col-id-input");
+  const nameInput = document.getElementById("edit-col-name-input");
+  const typeSelect = document.getElementById("edit-col-type-select");
+  const errorEl = document.getElementById("edit-col-error-msg");
+  const noticeEl = document.getElementById("edit-col-type-notice");
+
+  if (idInput) idInput.value = col.columnId;
+  if (nameInput) {
+    nameInput.value = col.label;
+    setTimeout(() => nameInput.focus(), 150);
+  }
+  if (typeSelect) {
+    typeSelect.value = col.type || "text";
+    // Core columns have fixed fundamental types
+    typeSelect.disabled = !!col.isCore;
+  }
+  if (noticeEl) {
+    noticeEl.style.display = col.isCore ? "none" : "block";
+  }
+  if (errorEl) {
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+  }
+
+  openModal("modal-edit-column");
+};
+
+/**
+ * Handle Save Edit / Rename Column Form Submit
+ */
+window.handleSaveEditColumn = async (event) => {
+  event.preventDefault();
+  if (!selectedSchool || isSavingColumn) return;
+
+  const idInput = document.getElementById("edit-col-id-input");
+  const nameInput = document.getElementById("edit-col-name-input");
+  const typeSelect = document.getElementById("edit-col-type-select");
+  const errorEl = document.getElementById("edit-col-error-msg");
+  const saveBtn = document.getElementById("btn-save-edit-column");
+
+  const columnId = idInput?.value || "";
+  const rawLabel = (nameInput?.value || "").trim();
+  const colType = typeSelect?.value || "text";
+
+  if (!rawLabel) {
+    if (errorEl) {
+      errorEl.textContent = "Please enter a valid column name.";
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const normNew = normalizeColumnLabel(rawLabel);
+
+  // Authoritative duplicate validation against OTHER columns in this school
+  const isDuplicate = currentCols.some(
+    (c) => c.columnId !== columnId && normalizeColumnLabel(c.label) === normNew
+  );
+  if (isDuplicate) {
+    if (errorEl) {
+      errorEl.textContent = `Another column with the name "${rawLabel}" already exists.`;
+      errorEl.style.display = "block";
+    }
+    nameInput?.focus();
+    return;
+  }
+
+  // Update label and type against the SAME permanent columnId
+  const updatedCols = currentCols.map((c) => {
+    if (c.columnId === columnId) {
+      return {
+        ...c,
+        label: rawLabel,
+        type: c.isCore ? c.type : colType
+      };
+    }
+    return { ...c };
+  });
+
+  isSavingColumn = true;
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
+  try {
+    await saveSchoolColumns(selectedSchool.schoolId, updatedCols);
+
+    selectedSchool.schoolDataColumns = updatedCols;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], schoolDataColumns: updatedCols };
+    }
+
+    closeModal("modal-edit-column");
+    renderSchoolColumnsTab(selectedSchool);
+    showToast(`Column updated to "${rawLabel}".`, "success");
+  } catch (err) {
+    console.error("Save edit column error:", err);
+    if (errorEl) {
+      errorEl.textContent = "Failed to save changes. Please try again.";
+      errorEl.style.display = "block";
+    }
+    showToast("Failed to update column.", "error");
+  } finally {
+    isSavingColumn = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Changes";
+    }
+  }
+};
+
+/**
+ * Handle Move / Reorder Column (Up / Down)
+ */
+window.handleMoveColumn = async (columnId, direction) => {
+  if (!selectedSchool || !columnId || isSavingColumn) return;
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const idx = currentCols.findIndex((c) => c.columnId === columnId);
+  if (idx === -1) return;
+
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= currentCols.length) return;
+
+  // Swap positions in array
+  const reordered = [...currentCols];
+  const [moved] = reordered.splice(idx, 1);
+  reordered.splice(targetIdx, 0, moved);
+
+  // Normalize order numbers 1..N
+  reordered.forEach((c, i) => { c.order = i + 1; });
+
+  isSavingColumn = true;
+  try {
+    await saveSchoolColumns(selectedSchool.schoolId, reordered);
+
+    selectedSchool.schoolDataColumns = reordered;
+    const sIdx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (sIdx !== -1) {
+      liveSchools[sIdx] = { ...liveSchools[sIdx], schoolDataColumns: reordered };
+    }
+
+    renderSchoolColumnsTab(selectedSchool);
+    showToast(`Column order updated.`, "success");
+  } catch (err) {
+    console.error("Reorder column error:", err);
+    showToast("Failed to update column order.", "error");
+  } finally {
+    isSavingColumn = false;
+  }
+};
+
+/**
+ * Open Modal to Delete Column with Student Data Pre-Check
+ */
+window.openDeleteColumnModal = async (columnId) => {
+  if (!selectedSchool || !columnId) return;
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const col = currentCols.find((c) => c.columnId === columnId);
+  if (!col) return;
+
+  if (col.isCore) {
+    showToast(`Core system column "${col.label}" is required and cannot be deleted.`, "error");
+    return;
+  }
+
+  const idInput = document.getElementById("del-col-id-input");
+  const nameEl = document.getElementById("del-col-name");
+  const warningEl = document.getElementById("del-col-warning-text");
+
+  if (idInput) idInput.value = col.columnId;
+  if (nameEl) nameEl.textContent = `"${col.label}"`;
+
+  // Pre-check if any student has data in this column
+  let dataCount = 0;
+  try {
+    const students = await getSchoolDatasetStudents(selectedSchool.schoolId, "school_data");
+    dataCount = students.filter((st) => {
+      const val = getStudentFieldValue(st, col);
+      return val !== "" && val !== "—" && val !== null && val !== undefined;
+    }).length;
+  } catch (err) {
+    console.warn("Could not pre-check student data count:", err);
+  }
+
+  if (warningEl) {
+    if (dataCount > 0) {
+      warningEl.innerHTML = `
+        <strong style="color: #dc2626;">Warning:</strong> This column contains student data in <strong>${dataCount}</strong> record(s). Deleting it will permanently remove this field's data from School Data records. Continue?
+      `;
+    } else {
+      warningEl.textContent = "This column has no active student data. Are you sure you want to remove it from this school's configuration?";
+    }
+  }
+
+  openModal("modal-confirm-delete-column");
+};
+
+/**
+ * Handle Confirmed Deletion of a Custom Column
+ */
+window.handleConfirmDeleteColumn = async () => {
+  if (!selectedSchool || isSavingColumn) return;
+
+  const idInput = document.getElementById("del-col-id-input");
+  const columnId = idInput?.value || "";
+  if (!columnId) return;
+
+  const currentCols = getSchoolDataColumns(selectedSchool);
+  const colToDelete = currentCols.find((c) => c.columnId === columnId);
+  if (!colToDelete || colToDelete.isCore) return;
+
+  const updatedCols = currentCols.filter((c) => c.columnId !== columnId);
+  updatedCols.forEach((c, idx) => { c.order = idx + 1; });
+
+  const delBtn = document.getElementById("btn-confirm-delete-col-action");
+  isSavingColumn = true;
+  if (delBtn) {
+    delBtn.disabled = true;
+    delBtn.textContent = "Deleting...";
+  }
+
+  try {
+    // 1. Update school column configuration
+    await saveSchoolColumns(selectedSchool.schoolId, updatedCols);
+
+    // 2. Remove associated stored field values from student records
+    await deleteSchoolColumnData(selectedSchool.schoolId, columnId);
+
+    selectedSchool.schoolDataColumns = updatedCols;
+    const idx = liveSchools.findIndex((s) => s.schoolId === selectedSchool.schoolId);
+    if (idx !== -1) {
+      liveSchools[idx] = { ...liveSchools[idx], schoolDataColumns: updatedCols };
+    }
+
+    closeModal("modal-confirm-delete-column");
+    renderSchoolColumnsTab(selectedSchool);
+    showToast(`Column "${colToDelete.label}" and its field data were removed.`, "success");
+  } catch (err) {
+    console.error("Delete column error:", err);
+    showToast("Failed to delete column.", "error");
+  } finally {
+    isSavingColumn = false;
+    if (delBtn) {
+      delBtn.disabled = false;
+      delBtn.textContent = "Delete";
+    }
   }
 };
 
